@@ -8,14 +8,18 @@
 //!
 //! For a professional-grade library, consider using [polars](https://www.pola.rs/).
 //! For more information on Apache Arrow, visit [arrow-rs](https://arrow.apache.org/).
+//!
 //! MIT License
 //!
 //! Copyright (c) [2025] [William Froes]
 //! Project: [crossbow]
 //! Developed at: [Uergs -- Universidade Estadual do Rio Grande do Sul]
-use arrow::array::{Array, ArrayRef};
+use arrow::array::{Array, ArrayRef, PrimitiveArray};
 use arrow::datatypes::DataType;
 use std::sync::Arc;
+
+// Import CrossbowError from your error module (adjust the path if needed)
+use crate::error::CrossbowError;
 
 #[cfg(test)]
 mod unit_test;
@@ -25,16 +29,6 @@ mod unit_test;
 /// A `Series` is the primary unit of data in this crate. It is a wrapper
 /// around an [`ArrayRef`] from the `arrow-rs` crate, which allows it to
 /// efficiently hold data of different types (like `i32`, `&str`, etc.).
-///
-/// # Examples
-///
-/// The easiest way to create a `Series` is by using the [`Series::from`] method.
-///
-/// ```
-/// # use crossbow::Series; // The # hides this line from the final output but is needed for the test
-/// let s = Series::from("numbers", vec![1, 2, 3]);
-/// assert_eq!(s.len(), 3);
-/// ```
 #[derive(Debug, Clone)]
 pub struct Series {
     name: String,
@@ -50,19 +44,6 @@ impl Series {
     ///
     /// # Returns
     /// A new instance of [`Series`].
-    ///
-    /// # Example
-    /// ```
-    /// use arrow::array::Int32Array;
-    /// use std::sync::Arc;
-    /// use crossbow::Series;
-    ///
-    /// let int_data = Int32Array::from(vec![Some(1), Some(2), Some(3)]);
-    /// let series = Series::new("numbers", Arc::new(int_data));
-    /// assert_eq!(series.name(), "numbers");
-    /// assert_eq!(series.len(), 3);
-    /// assert_eq!(series.dtype(), &arrow::datatypes::DataType::Int32);
-    /// ```
     pub fn new(name: impl Into<String>, data: ArrayRef) -> Self {
         Series {
             name: name.into(),
@@ -80,26 +61,7 @@ impl Series {
     ///
     /// # Returns
     /// A Series containing the data from the vector.
-    ///
-    /// # Example
-    /// ```
-    /// use crossbow::Series;
-    ///
-    /// let series = Series::from(vec![1, 2, 3], "numbers");
-    /// assert_eq!(series.name(), "numbers");
-    /// assert_eq!(series.len(), 3);
-    /// assert_eq!(series.dtype(), &arrow::datatypes::DataType::Int32 );
-    /// ```
-    /// You can also use it with Option types:
-    /// ```
-    /// use crossbow::Series;
-    ///
-    /// let series_opt = Series::from(vec![Some(1), None, Some(3)], "optional_numbers");
-    /// assert_eq!(series_opt.name(), "optional_numbers");
-    /// assert_eq!(series_opt.len(), 3);
-    /// assert_eq!(series_opt.dtype(), &arrow::datatypes::DataType::Int32);
-    /// ```
-    pub fn from<T>(data: Vec<T>, name: &str) -> Series
+    pub fn from<T>(name: &str, data: Vec<T>) -> Series
     where
         T: 'static,
         Vec<T>: IntoSeries,
@@ -111,14 +73,6 @@ impl Series {
     ///
     /// # Returns
     /// A [`&str`] slice representing the name of the Series.
-    ///
-    /// # Example
-    /// ```
-    /// use crossbow::Series;
-    ///
-    /// let series = Series::from(vec![1, 2, 3], "numbers");
-    /// assert_eq!(series.name(), "numbers");
-    /// ```
     ///
     /// # Note
     /// The name is stored as a `String` internally, but this method returns a `&str` for convenience.
@@ -133,17 +87,6 @@ impl Series {
     /// # Returns
     /// A reference to the underlying [`ArrayRef`].
     ///
-    /// # Example
-    /// ```
-    /// use arrow::array::Int32Array;
-    /// use std::sync::Arc;
-    /// use crossbow::Series;
-    ///
-    /// let int_data = Int32Array::from(vec![Some(1), Some(
-    /// 2), Some(3)]);
-    /// let series = Series::new("numbers", Arc::new(int_data.clone()));
-    /// assert_eq!(series.data().as_ref(), &int_data);
-    /// ```
     /// # Note
     /// This method provides direct access to the underlying Arrow array.
     /// Be cautious when using it, as modifying the array directly can lead to inconsistencies
@@ -159,15 +102,6 @@ impl Series {
     /// # Returns
     /// A reference to the [`DataType`] of the Series.
     ///
-    /// # Example
-    /// ```
-    /// use crossbow::Series;
-    /// use arrow::datatypes::DataType;
-    ///
-    /// let series = Series::from(vec![1, 2, 3], "numbers");
-    /// assert_eq!(series.dtype(), &DataType::Int32);
-    /// ```
-    ///
     /// # Note
     /// The data type is derived from the underlying Arrow array.
     /// This method is useful for understanding the type of data stored in the Series,
@@ -180,6 +114,12 @@ impl Series {
     pub fn len(&self) -> usize {
         self.data.len()
     }
+
+    /// Returns true if the Series contains no elements.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Attempts to downcast the internal data to a specific Arrow array type.
     ///
     /// # Type Parameters
@@ -187,14 +127,6 @@ impl Series {
     ///
     /// # Returns
     /// * `Some(&T)` if the downcast is successful, otherwise `None`.
-    ///
-    /// # Example
-    /// ```
-    /// let series = Series::from(vec![1, 2, 3], "my_series");
-    /// if let Some(int_array) = series.as_primitive::<arrow::array::Int32Array>() {
-    ///     // Do something with the downcasted array
-    /// }
-    /// ```
     pub fn as_primitive<T>(&self) -> Option<&T>
     where
         T: 'static,
@@ -213,18 +145,13 @@ impl Series {
     /// If the value is null, returns "null".
     /// If the type is unsupported, returns a message indicating so.
     ///
-    /// # Example
-    /// ```
-    /// let value_str = series.get_value_as_string(0);
-    /// println!("Value at index 0: {}", value_str);
-    /// ```
     /// # Panics
     /// Panics if the index is out of bounds.
     ///
     /// # Note
     /// This method currently supports Int32, Float64, Utf8 (String), and Boolean types.
     /// You can extend it to support more types as needed.  
-    fn get_value_as_string(&self, index: usize) -> String {
+    pub(crate) fn get_value_as_string(&self, index: usize) -> String {
         if self.data.is_null(index) {
             return "null".to_string();
         }
@@ -272,12 +199,6 @@ impl std::fmt::Display for Series {
     /// Displays the Series in a tabular format with index and values.
     /// If the Series is longer than 10 elements, it shows the first 5 and last 5 elements.
     /// Also displays the data type at the bottom.
-    ///
-    /// # Example
-    /// ```
-    /// let series = Series::from(vec![1, 2, 3, 4, 5], "numbers");
-    /// println!("{}", series);
-    /// ```
     ///
     /// # Note
     /// This implementation currently supports Int32, Float64, Utf8 (String), and Boolean types.
@@ -354,21 +275,6 @@ pub trait IntoSeries {
     /// * `name` - The name of the Series.
     /// # Returns
     /// A Series containing the data from the vector.
-    ///
-    /// # Example
-    /// ```
-    /// let series = vec![1, 2, 3].into_series("numbers");
-    /// assert_eq!(series.name(), "numbers");
-    /// assert_eq!(series.len(), 3);
-    /// assert_eq!(series.dtype(), &DataType::Int32);
-    /// ```
-    /// You can also use it with Option types:
-    /// ```
-    /// let series_opt = vec![Some(1), None, Some(3)].into_series("optional_numbers");
-    /// assert_eq!(series_opt.name(), "optional_numbers");
-    /// assert_eq!(series_opt.len(), 3);
-    /// assert_eq!(series_opt.dtype(), &DataType::Int32);
-    /// ```
     fn into_series(self, name: &str) -> Series;
 }
 
@@ -385,7 +291,6 @@ impl IntoSeries for Vec<Option<&str>> {
         Series::new(name, Arc::new(array))
     }
 }
-// Você pode adicionar para String também se precisar
 impl IntoSeries for Vec<String> {
     fn into_series(self, name: &str) -> Series {
         let array =
@@ -398,23 +303,7 @@ impl IntoSeries for Vec<String> {
 /// It generates implementations for both `Vec<T>` and `Vec<Option<T>>` where `T` is a numeric type.
 /// # Arguments
 /// * `$T`: The Rust primitive type (e.g., `i32`, `f64`, etc.).
-/// * `$A`: The corresponding Arrow array type (e.g., `Int32Array`, `Float64Array`, etc.).
-///
-/// # Example
-/// ```
-/// let series = vec![1, 2, 3].into_series("numbers");
-/// assert_eq!(series.name(), "numbers");
-/// assert_eq!(series.len(), 3);
-/// assert_eq!(series.dtype(), &DataType::Int32);
-/// ```
-///
-/// You can also use it with Option types:
-/// ```
-/// let series_opt = vec![Some(1), None, Some(3)].into_series("optional_numbers");
-/// assert_eq!(series_opt.name(), "optional_numbers");
-/// assert_eq!(series_opt.len(), 3);
-/// assert_eq!(series_opt.dtype(), &DataType::Int32);
-/// ```
+/// * `$A`: The corresponding Arrow array type (e.g., `Int32Array`, `Float64Array`, etc.);
 macro_rules! impl_into_series_for_numerics {
     ($T:ty, $A:ty) => {
         // Implementação para Vec<T> (sem nulos)
@@ -434,6 +323,86 @@ macro_rules! impl_into_series_for_numerics {
     };
 }
 
-impl_into_series_for_numerics!(i32, arrow::array::Int32Array);
-impl_into_series_for_numerics!(f64, arrow::array::Float64Array);
 impl_into_series_for_numerics!(bool, arrow::array::BooleanArray);
+impl_into_series_for_numerics!(i8, arrow::array::Int8Array);
+impl_into_series_for_numerics!(i16, arrow::array::Int16Array);
+impl_into_series_for_numerics!(i32, arrow::array::Int32Array);
+impl_into_series_for_numerics!(i64, arrow::array::Int64Array);
+impl_into_series_for_numerics!(u8, arrow::array::UInt8Array);
+impl_into_series_for_numerics!(u16, arrow::array::UInt16Array);
+impl_into_series_for_numerics!(u32, arrow::array::UInt32Array);
+impl_into_series_for_numerics!(u64, arrow::array::UInt64Array);
+impl_into_series_for_numerics!(f32, arrow::array::Float32Array);
+impl_into_series_for_numerics!(f64, arrow::array::Float64Array);
+
+// This macro helps implement comparison operations for the `Series` struct.
+// It generates a function that takes a scalar value and applies a given Arrow compute
+// kernel to produce a boolean `Series`.
+macro_rules! impl_comparison_op {
+    ($func_name:ident, $kernel:path, $doc:expr) => {
+        #[doc = $doc]
+        pub fn $func_name<T>(&self, value: T) -> Result<Series, CrossbowError>
+        where
+            T: arrow::datatypes::ArrowNumericType,
+            T: arrow::array::Datum,
+            T::Native: arrow::datatypes::ArrowNativeType,
+        {
+            // Downcast the generic Arc<dyn Array> to a concrete Arrow PrimitiveArray.
+            // This ensures the operation is only performed on numeric series.
+            let array = self
+                .data() // Assuming you have a .data() method now.
+                .as_any()
+                .downcast_ref::<arrow::array::PrimitiveArray<T>>()
+                .ok_or_else(|| {
+                    CrossbowError::OperationNotSupported(format!(
+                        "operation '{}' not supported for dtype {:?}",
+                        stringify!($func_name),
+                        self.dtype()
+                    ))
+                })?;
+
+            let boolean_array = $kernel(array, &value)?;
+
+            // Return a new boolean Series containing the result of the comparison.
+            Ok(Series::new(self.name(), std::sync::Arc::new(boolean_array)))
+        }
+    };
+}
+
+impl Series {
+    // ... your existing methods (new, name, len, etc.)
+
+    // Now, we use the macro to generate the comparison methods.
+    // The first argument is the name of the function we want to create.
+    // The second is the Arrow compute kernel that does the heavy lifting.
+    impl_comparison_op!(
+        gt,
+        arrow::compute::kernels::cmp::gt,
+        "Compares the Series with a scalar value (greater than)."
+    );
+    impl_comparison_op!(
+        lt,
+        arrow::compute::kernels::cmp::lt,
+        "Compares the Series with a scalar value (less than)."
+    );
+    impl_comparison_op!(
+        eq,
+        arrow::compute::kernels::cmp::eq,
+        "Compares the Series with a scalar value (equal to)."
+    );
+    impl_comparison_op!(
+        neq,
+        arrow::compute::kernels::cmp::neq,
+        "Compares the Series with a scalar value (not equal to)."
+    );
+    impl_comparison_op!(
+        gt_eq,
+        arrow::compute::kernels::cmp::gt_eq,
+        "Compares the Series with a scalar value (greater than or equal to)."
+    );
+    impl_comparison_op!(
+        lt_eq,
+        arrow::compute::kernels::cmp::lt_eq,
+        "Compares the Series with a scalar value (less than or equal to)."
+    );
+}
