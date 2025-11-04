@@ -2,407 +2,332 @@
 //!
 //! A series is a named, strongly-typed column of data.
 //!
-//! A `Series` is the primary unit of data in this crate. It is a wrapper
-//! around an [`ArrayRef`] from the `arrow-rs` crate, which allows it to
-//! efficiently hold data of different types (like `i32`, `&str`, etc.).
-//!
-//! For a professional-grade library, consider using [polars](https://www.pola.rs/).
-//! For more information on Apache Arrow, visit [arrow-rs](https://arrow.apache.org/).
-//!
 //! MIT License
-//!
-//! Copyright (c) [2025] [William Froes]
-//! Project: [crossbow]
-//! Developed at: [Uergs -- Universidade Estadual do Rio Grande do Sul]
-use arrow::array::{Array, ArrayRef, PrimitiveArray};
-use arrow::datatypes::DataType;
-use std::sync::Arc;
+//! ... (copyright)
 
-// Import CrossbowError from your error module (adjust the path if needed)
 use crate::error::CrossbowError;
+use crate::types::DataType;
+use crate::types::SeriesData;
 
 #[cfg(test)]
-mod unit_test;
+mod unit_tests;
+
+// This macro will handle the core filter logic.
+// It takes the data vector and the boolean mask slice.
+// Zips them up, and only keeps items where mask is Some(true).
+macro_rules! apply_boolean_mask {
+    ($data_vec:expr, $mask_slice:expr) => {{
+        $data_vec
+            .iter()
+            .zip($mask_slice.iter())
+            .filter_map(|(data_opt, mask_opt)| {
+                // Only keep if mask is explicitly true.
+                // false or null masks mean we drop the value.
+                match mask_opt {
+                    Some(true) => Some(data_opt.clone()),
+                    _ => None,
+                }
+            })
+            .collect()
+    }};
+}
 
 /// Represents a named, strongly-typed column of data.
 ///
-/// A `Series` is the primary unit of data in this crate. It is a wrapper
-/// around an [`ArrayRef`] from the `arrow-rs` crate, which allows it to
-/// efficiently hold data of different types (like `i32`, `&str`, etc.).
+/// This is the primary unit of data. It wraps an internal
+/// data container to provide a safe, unified API.
 #[derive(Debug, Clone)]
 pub struct Series {
     name: String,
-    data: ArrayRef,
+    data: SeriesData,
 }
 
 impl Series {
-    /// Creates a new Series with the given name and data.
-    ///
-    /// # Arguments
-    /// * `name` - The name of the Series.
-    /// * `data` - An [`ArrayRef`] containing the data for the [`Series`].
-    ///
-    /// # Returns
-    /// A new instance of [`Series`].
-    pub fn new(name: impl Into<String>, data: ArrayRef) -> Self {
-        Series {
+    // Internal constructors.
+    // These are called by the `IntoSeries` trait implementations.
+    pub(crate) fn new_int32(name: impl Into<String>, data: Vec<Option<i32>>) -> Self {
+        Self {
             name: name.into(),
-            data,
+            data: SeriesData::Int32(data),
+        }
+    }
+    pub(crate) fn new_int64(name: impl Into<String>, data: Vec<Option<i64>>) -> Self {
+        Self {
+            name: name.into(),
+            data: SeriesData::Int64(data),
+        }
+    }
+    pub(crate) fn new_f64(name: impl Into<String>, data: Vec<Option<f64>>) -> Self {
+        Self {
+            name: name.into(),
+            data: SeriesData::Float64(data),
+        }
+    }
+    pub(crate) fn new_bool(name: impl Into<String>, data: Vec<Option<bool>>) -> Self {
+        Self {
+            name: name.into(),
+            data: SeriesData::Boolean(data),
+        }
+    }
+    pub(crate) fn new_string(name: impl Into<String>, data: Vec<Option<String>>) -> Self {
+        Self {
+            name: name.into(),
+            data: SeriesData::String(data),
         }
     }
 
-    /// Creates a Series from a vector of values and a name.
-    /// This is a convenience method that leverages the `IntoSeries` trait
-    /// to convert the vector into an appropriate Arrow array.
-    ///
-    /// # Arguments
-    /// * `data` - A vector of values to be converted into a Series.
-    /// * `name` - The name of the Series.
-    ///
-    /// # Returns
-    /// A Series containing the data from the vector.
+    /// Creates a new column from a name and a collection of values.
+    /// This is the main public constructor.
     pub fn from<T>(name: &str, data: Vec<T>) -> Series
     where
         T: 'static,
         Vec<T>: IntoSeries,
     {
+        // Delegates creation to the trait implementation.
         data.into_series(name)
     }
 
-    /// Returns the name of this [`Series`].
-    ///
-    /// # Returns
-    /// A [`&str`] slice representing the name of the Series.
-    ///
-    /// # Note
-    /// The name is stored as a `String` internally, but this method returns a `&str` for convenience.
-    /// This avoids unnecessary cloning of the name when you just need to read it.
-    /// If you need ownership of the name, you can always clone it using `series.name().to_string()`.
+    /// Returns the name of the column.
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// Returns a reference to the data of this [`Series`].
-    ///
-    /// # Returns
-    /// A reference to the underlying [`ArrayRef`].
-    ///
-    /// # Note
-    /// This method provides direct access to the underlying Arrow array.
-    /// Be cautious when using it, as modifying the array directly can lead to inconsistencies
-    /// with the Series' metadata (like name and length).
-    /// In most cases, you should use the other methods provided by the Series struct
-    #[allow(dead_code)]
-    pub fn data(&self) -> &ArrayRef {
-        &self.data
+    /// Returns the logical data type of the column.
+    pub fn dtype(&self) -> DataType {
+        match &self.data {
+            SeriesData::Int32(_) => DataType::Int32,
+            SeriesData::Int64(_) => DataType::Int64,
+            SeriesData::Float64(_) => DataType::Float64,
+            SeriesData::Boolean(_) => DataType::Boolean,
+            SeriesData::String(_) => DataType::String,
+        }
     }
 
-    /// Returns the data type of the underlying Arrow array.
-    ///
-    /// # Returns
-    /// A reference to the [`DataType`] of the Series.
-    ///
-    /// # Note
-    /// The data type is derived from the underlying Arrow array.
-    /// This method is useful for understanding the type of data stored in the Series,
-    /// especially when working with heterogeneous data.
-    pub fn dtype(&self) -> &DataType {
-        self.data.data_type()
-    }
-
-    /// Returns the length of the Series.   
+    /// Returns the number of elements (rows) in the column.
     pub fn len(&self) -> usize {
-        self.data.len()
+        match &self.data {
+            SeriesData::Int32(v) => v.len(),
+            SeriesData::Int64(v) => v.len(),
+            SeriesData::Float64(v) => v.len(),
+            SeriesData::Boolean(v) => v.len(),
+            SeriesData::String(v) => v.len(),
+        }
     }
 
-    /// Returns true if the Series contains no elements.
+    /// Checks if the column contains no elements.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Attempts to downcast the internal data to a specific Arrow array type.
-    ///
-    /// # Type Parameters
-    /// * `T`: The target Arrow array type to downcast to (e.g.,`Int32Array`, `Float64Array`, etc.).
-    ///
-    /// # Returns
-    /// * `Some(&T)` if the downcast is successful, otherwise `None`.
-    pub fn as_primitive<T>(&self) -> Option<&T>
-    where
-        T: 'static,
-    {
-        self.data.as_any().downcast_ref::<T>()
-    }
-
-    /// Helper function to get a string representation of a value at a given index.
-    /// This is used for displaying the Series.
-    ///
-    /// # Arguments
-    /// * `index` - The index of the value to retrieve.
-    ///
-    /// # Returns
-    /// A string representation of the value at the given index.
-    /// If the value is null, returns "null".
-    /// If the type is unsupported, returns a message indicating so.
-    ///
-    /// # Panics
-    /// Panics if the index is out of bounds.
-    ///
-    /// # Note
-    /// This method currently supports Int32, Float64, Utf8 (String), and Boolean types.
-    /// You can extend it to support more types as needed.  
-    pub(crate) fn get_value_as_string(&self, index: usize) -> String {
-        if self.data.is_null(index) {
-            return "null".to_string();
-        }
-
-        match self.dtype() {
-            DataType::Int32 => {
-                let array = self
-                    .data
-                    .as_any()
-                    .downcast_ref::<arrow::array::Int32Array>()
-                    .unwrap();
-                array.value(index).to_string()
-            }
-            DataType::Float64 => {
-                let array = self
-                    .data
-                    .as_any()
-                    .downcast_ref::<arrow::array::Float64Array>()
-                    .unwrap();
-                array.value(index).to_string()
-            }
-            DataType::Utf8 => {
-                let array = self
-                    .data
-                    .as_any()
-                    .downcast_ref::<arrow::array::StringArray>()
-                    .unwrap();
-                format!("\"{}\"", array.value(index))
-            }
-            DataType::Boolean => {
-                let array = self
-                    .data
-                    .as_any()
-                    .downcast_ref::<arrow::array::BooleanArray>()
-                    .unwrap();
-                array.value(index).to_string()
-            }
-            other_type => format!("Unsupported type: {:?}", other_type),
+    /// Checks if the value at a specific index is null.
+    pub fn is_null(&self, index: usize) -> bool {
+        // Panics on out-of-bounds, which is fine.
+        match &self.data {
+            SeriesData::Int32(v) => v[index].is_none(),
+            SeriesData::Int64(v) => v[index].is_none(),
+            SeriesData::Float64(v) => v[index].is_none(),
+            SeriesData::Boolean(v) => v[index].is_none(),
+            SeriesData::String(v) => v[index].is_none(),
         }
     }
+
+    /// Performs a 'greater than' comparison against a scalar value.
+    ///
+    /// This creates a new boolean mask. Nulls in the original
+    /// data will result in nulls in the mask.
+    pub fn gt_i64(&self, value: i64) -> Result<Series, CrossbowError> {
+        // This operation will be a closure.
+        let op = |a: &i64| a > &value;
+
+        // Need to dispatch based on the internal data.
+        let new_data = match &self.data {
+            SeriesData::Int64(v) => {
+                // OK, map over the vector.
+                // If `Some(val)`, apply the op. If `None`, keep it `None`.
+                let mask: Vec<Option<bool>> =
+                    v.iter().map(|opt_val| opt_val.as_ref().map(op)).collect();
+                Ok(mask)
+            }
+            SeriesData::Float64(v) => {
+                // Also good to allow comparing an int with a float column.
+                let f_value = value as f64;
+                let op_f = |a: &f64| a > &f_value;
+                let mask: Vec<Option<bool>> =
+                    v.iter().map(|opt_val| opt_val.as_ref().map(op_f)).collect();
+                Ok(mask)
+            }
+            // Other types aren't comparable to an i64 this way.
+            _ => Err(CrossbowError::OperationNotSupported(format!(
+                "Operation 'gt_i64' not supported for dtype {:?}",
+                self.dtype()
+            ))),
+        }?;
+
+        // Cool, now wrap this boolean vector in a new Series.
+        Ok(Series::new_bool(self.name(), new_data))
+    }
+
+    // TODO: Add lt_i64, eq_i64, gt_f64, eq_str, etc. following this pattern.
+
+    /// Creates a new object containing only the values
+    /// corresponding to `true` entries in the mask.
+    pub fn filter(&self, mask: &Series) -> Result<Series, CrossbowError> {
+        // First, validate the mask.
+        // It must be boolean.
+        let mask_slice = match &mask.data {
+            SeriesData::Boolean(v) => v.as_slice(),
+            _ => {
+                return Err(CrossbowError::OperationNotSupported(
+                    "Filter mask must be of type Boolean".to_string(),
+                ));
+            }
+        };
+
+        // And it must be the same length.
+        if self.len() != mask.len() {
+            // Just reuse the existing error for this.
+            return Err(CrossbowError::MismatchedColumnLengths);
+        }
+
+        // OK, dispatch to the macro for each data type.
+        let new_data = match &self.data {
+            SeriesData::Int32(v) => {
+                let new_vec: Vec<Option<i32>> = apply_boolean_mask!(v, mask_slice);
+                SeriesData::Int32(new_vec)
+            }
+            SeriesData::Int64(v) => {
+                let new_vec: Vec<Option<i64>> = apply_boolean_mask!(v, mask_slice);
+                SeriesData::Int64(new_vec)
+            }
+            SeriesData::Float64(v) => {
+                let new_vec: Vec<Option<f64>> = apply_boolean_mask!(v, mask_slice);
+                SeriesData::Float64(new_vec)
+            }
+            SeriesData::Boolean(v) => {
+                // Yep, can filter a boolean series too.
+                let new_vec: Vec<Option<bool>> = apply_boolean_mask!(v, mask_slice);
+                SeriesData::Boolean(new_vec)
+            }
+            SeriesData::String(v) => {
+                let new_vec: Vec<Option<String>> = apply_boolean_mask!(v, mask_slice);
+                SeriesData::String(new_vec)
+            }
+        };
+
+        // Wrap the new data in a Series.
+        Ok(Series {
+            name: self.name.clone(),
+            data: new_data,
+        })
+    }
+
+    // Removed the `get_value_as_string` helper function.
 }
 
-impl std::fmt::Display for Series {
-    /// Custom display implementation for Series.
-    /// Displays the Series in a tabular format with index and values.
-    /// If the Series is longer than 10 elements, it shows the first 5 and last 5 elements.
-    /// Also displays the data type at the bottom.
-    ///
-    /// # Note
-    /// This implementation currently supports Int32, Float64, Utf8 (String), and Boolean types.
-    /// You can extend it to support more types as needed.
-    ///
-    /// # Panics
-    /// Panics if the internal data cannot be downcast to the expected types.
-    /// This should not happen if the Series is constructed correctly.  
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        const HEAD: usize = 5;
-        const TAIL: usize = 5;
-        let len = self.len();
+// Removed the `impl std::fmt::Display for Series` block.
 
-        let mut values_to_display = Vec::new();
-
-        if len > HEAD + TAIL {
-            for i in 0..HEAD {
-                values_to_display.push(self.get_value_as_string(i));
-            }
-            for i in (len - TAIL)..len {
-                values_to_display.push(self.get_value_as_string(i));
-            }
-        } else {
-            for i in 0..len {
-                values_to_display.push(self.get_value_as_string(i));
-            }
-        }
-
-        let index_width = len.saturating_sub(1).to_string().len();
-
-        let data_width = values_to_display
-            .iter()
-            .map(|s| s.len())
-            .max()
-            .unwrap_or(0)
-            .max(self.name().len());
-
-        writeln!(f, "┌─{:-<index_width$}─┬─{:-<data_width$}─┐", "", "")?;
-        writeln!(f, "│ {:>index_width$} │ {:^data_width$} │", "", self.name())?;
-        writeln!(f, "├─{:-<index_width$}─┼─{:-<data_width$}─┤", "", "")?;
-
-        if len > HEAD + TAIL {
-            for (i, item) in values_to_display.iter().enumerate().take(HEAD) {
-                writeln!(f, "│ {:>index_width$} │ {:<data_width$} │", i, item)?;
-            }
-            writeln!(f, "│ {:^index_width$} │ {:^data_width$} │", "...", "...")?;
-            for i in 0..TAIL {
-                let original_index = len - TAIL + i;
-                let value_index = HEAD + i;
-                writeln!(
-                    f,
-                    "│ {:>index_width$} │ {:<data_width$} │",
-                    original_index, values_to_display[value_index]
-                )?;
-            }
-        } else {
-            for (i, item) in values_to_display.iter().enumerate().take(HEAD) {
-                writeln!(f, "│ {:>index_width$} │ {:<data_width$} │", i, item)?;
-            }
-        }
-
-        writeln!(f, "└─{:-<index_width$}─┴─{:-<data_width$}─┘", "", "")?;
-        write!(f, "DataType: {:?}", self.dtype())?;
-
-        Ok(())
-    }
-}
-
+/// A trait for converting collections into a Series.
+///
+/// This allows `Series::from` to be generic.
 pub trait IntoSeries {
-    /// Converts a vector of values into a Series with the given name.
-    /// This is a convenience method for creating a Series from a vector.
-    ///
-    /// # Arguments
-    /// * `name` - The name of the Series.
-    /// # Returns
-    /// A Series containing the data from the vector.
+    /// Converts the collection into a Series.
     fn into_series(self, name: &str) -> Series;
 }
 
+// --- String/&str Implementations ---
+// We need to handle Vec<&str>, Vec<Option<&str>>, and Vec<String>
+
 impl IntoSeries for Vec<&str> {
     fn into_series(self, name: &str) -> Series {
-        let array = arrow::array::StringArray::from(self);
-        Series::new(name, Arc::new(array))
+        let data: Vec<Option<String>> = self.into_iter().map(|s| Some(s.to_string())).collect();
+        Series::new_string(name, data)
     }
 }
 
 impl IntoSeries for Vec<Option<&str>> {
     fn into_series(self, name: &str) -> Series {
-        let array = arrow::array::StringArray::from(self);
-        Series::new(name, Arc::new(array))
+        let data: Vec<Option<String>> = self
+            .into_iter()
+            .map(|opt_s| opt_s.map(|s| s.to_string()))
+            .collect();
+        Series::new_string(name, data)
     }
 }
 impl IntoSeries for Vec<String> {
     fn into_series(self, name: &str) -> Series {
-        let array =
-            arrow::array::StringArray::from(self.iter().map(|s| s.as_str()).collect::<Vec<&str>>());
-        Series::new(name, Arc::new(array))
+        let data: Vec<Option<String>> = self.into_iter().map(Some).collect();
+        Series::new_string(name, data)
     }
 }
 
-/// This macro helps to implement the `IntoSeries` trait for numeric types.
-/// It generates implementations for both `Vec<T>` and `Vec<Option<T>>` where `T` is a numeric type.
-/// # Arguments
-/// * `$T`: The Rust primitive type (e.g., `i32`, `f64`, etc.).
-/// * `$A`: The corresponding Arrow array type (e.g., `Int32Array`, `Float64Array`, etc.);
+/// This macro implements `IntoSeries` for numeric types.
+/// It handles both `Vec<T>` and `Vec<Option<T>>`.
 macro_rules! impl_into_series_for_numerics {
-    ($T:ty, $A:ty) => {
-        // Implementação para Vec<T> (sem nulos)
+    // $T = Rust type (e.g., i32)
+    // $C = Constructor function (e.g., new_int32)
+    ($T:ty, $C:ident) => {
+        // Implementation for Vec<T> (no nulls)
         impl IntoSeries for Vec<$T> {
             fn into_series(self, name: &str) -> Series {
-                let array = <$A>::from(self);
-                Series::new(name, Arc::new(array))
+                // Convert non-nullable vec into a vec of `Some(T)`
+                let data: Vec<Option<$T>> = self.into_iter().map(Some).collect();
+                Series::$C(name, data)
             }
         }
-        // Implementação para Vec<Option<T>> (com nulos)
+        // Implementation for Vec<Option<T>> (with nulls)
         impl IntoSeries for Vec<Option<$T>> {
             fn into_series(self, name: &str) -> Series {
-                let array = <$A>::from(self);
-                Series::new(name, Arc::new(array))
+                // This one is a direct pass-through
+                Series::$C(name, self)
             }
         }
     };
 }
 
-impl_into_series_for_numerics!(bool, arrow::array::BooleanArray);
-impl_into_series_for_numerics!(i8, arrow::array::Int8Array);
-impl_into_series_for_numerics!(i16, arrow::array::Int16Array);
-impl_into_series_for_numerics!(i32, arrow::array::Int32Array);
-impl_into_series_for_numerics!(i64, arrow::array::Int64Array);
-impl_into_series_for_numerics!(u8, arrow::array::UInt8Array);
-impl_into_series_for_numerics!(u16, arrow::array::UInt16Array);
-impl_into_series_for_numerics!(u32, arrow::array::UInt32Array);
-impl_into_series_for_numerics!(u64, arrow::array::UInt64Array);
-impl_into_series_for_numerics!(f32, arrow::array::Float32Array);
-impl_into_series_for_numerics!(f64, arrow::array::Float64Array);
-
-// This macro helps implement comparison operations for the `Series` struct.
-// It generates a function that takes a scalar value and applies a given Arrow compute
-// kernel to produce a boolean `Series`.
-macro_rules! impl_comparison_op {
-    ($func_name:ident, $kernel:path, $doc:expr) => {
-        #[doc = $doc]
-        pub fn $func_name<T>(&self, value: T) -> Result<Series, CrossbowError>
-        where
-            T: arrow::datatypes::ArrowNumericType,
-            T: arrow::array::Datum,
-            T::Native: arrow::datatypes::ArrowNativeType,
-        {
-            // Downcast the generic Arc<dyn Array> to a concrete Arrow PrimitiveArray.
-            // This ensures the operation is only performed on numeric series.
-            let array = self
-                .data() // Assuming you have a .data() method now.
-                .as_any()
-                .downcast_ref::<arrow::array::PrimitiveArray<T>>()
-                .ok_or_else(|| {
-                    CrossbowError::OperationNotSupported(format!(
-                        "operation '{}' not supported for dtype {:?}",
-                        stringify!($func_name),
-                        self.dtype()
-                    ))
-                })?;
-
-            let boolean_array = $kernel(array, &value)?;
-
-            // Return a new boolean Series containing the result of the comparison.
-            Ok(Series::new(self.name(), std::sync::Arc::new(boolean_array)))
-        }
-    };
-}
+// Register the types we want to support.
+impl_into_series_for_numerics!(bool, new_bool);
+impl_into_series_for_numerics!(i32, new_int32);
+impl_into_series_for_numerics!(i64, new_int64);
+impl_into_series_for_numerics!(f64, new_f64);
 
 impl Series {
-    // ... your existing methods (new, name, len, etc.)
+    #[cfg(test)] // Only compile this for tests
+    pub(crate) fn as_i32_slice(&self) -> Option<&[Option<i32>]> {
+        match &self.data {
+            SeriesData::Int32(v) => Some(v.as_slice()),
+            _ => None,
+        }
+    }
 
-    // Now, we use the macro to generate the comparison methods.
-    // The first argument is the name of the function we want to create.
-    // The second is the Arrow compute kernel that does the heavy lifting.
-    impl_comparison_op!(
-        gt,
-        arrow::compute::kernels::cmp::gt,
-        "Compares the Series with a scalar value (greater than)."
-    );
-    impl_comparison_op!(
-        lt,
-        arrow::compute::kernels::cmp::lt,
-        "Compares the Series with a scalar value (less than)."
-    );
-    impl_comparison_op!(
-        eq,
-        arrow::compute::kernels::cmp::eq,
-        "Compares the Series with a scalar value (equal to)."
-    );
-    impl_comparison_op!(
-        neq,
-        arrow::compute::kernels::cmp::neq,
-        "Compares the Series with a scalar value (not equal to)."
-    );
-    impl_comparison_op!(
-        gt_eq,
-        arrow::compute::kernels::cmp::gt_eq,
-        "Compares the Series with a scalar value (greater than or equal to)."
-    );
-    impl_comparison_op!(
-        lt_eq,
-        arrow::compute::kernels::cmp::lt_eq,
-        "Compares the Series with a scalar value (less than or equal to)."
-    );
+    #[cfg(test)] // Only compile this for tests
+    pub(crate) fn as_i64_slice(&self) -> Option<&[Option<i64>]> {
+        match &self.data {
+            SeriesData::Int64(v) => Some(v.as_slice()),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)] // Only compile this for tests
+    pub(crate) fn as_f64_slice(&self) -> Option<&[Option<f64>]> {
+        match &self.data {
+            SeriesData::Float64(v) => Some(v.as_slice()),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)] // Only compile this for tests
+    pub(crate) fn as_bool_slice(&self) -> Option<&[Option<bool>]> {
+        match &self.data {
+            SeriesData::Boolean(v) => Some(v.as_slice()),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)] // Only compile this for tests
+    pub(crate) fn as_string_slice(&self) -> Option<&[Option<String>]> {
+        match &self.data {
+            SeriesData::String(v) => Some(v.as_slice()),
+            _ => None,
+        }
+    }
 }

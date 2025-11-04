@@ -7,6 +7,7 @@
 pub mod dataframe;
 pub mod error;
 pub mod series;
+pub mod types;
 
 pub use self::dataframe::DataFrame;
 pub use self::error::CrossbowError;
