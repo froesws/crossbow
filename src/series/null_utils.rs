@@ -9,20 +9,12 @@ use crate::series::Series;
 impl Series {
     /// Returns a boolean `Series` indicating which elements are null.
     pub fn is_null(&self) -> Result<Series, CrossbowError> {
-        let mut builder = arrow::array::BooleanBuilder::with_capacity(self.len());
-        for i in 0..self.len() {
-            builder.append_value(self.data.is_null(i));
-        }
-        Ok(Series::new(format!("{}_is_null", self.name()), Arc::new(builder.finish())))
+        self.null_mask(false)
     }
 
     /// Returns a boolean `Series` indicating which elements are **not** null.
     pub fn is_not_null(&self) -> Result<Series, CrossbowError> {
-        let mut builder = arrow::array::BooleanBuilder::with_capacity(self.len());
-        for i in 0..self.len() {
-            builder.append_value(!self.data.is_null(i));
-        }
-        Ok(Series::new(format!("{}_is_not_null", self.name()), Arc::new(builder.finish())))
+        self.null_mask(true)
     }
 
     /// Fills null values with the corresponding value from another `Series`.
@@ -169,5 +161,18 @@ impl Series {
     /// Returns `true` if the `Series` holds boolean data.
     pub fn is_boolean(&self) -> bool {
         matches!(self.dtype(), DataType::Boolean)
+    }
+
+    fn null_mask(&self, invert: bool) -> Result<Series, CrossbowError> {
+        let mut builder = arrow::array::BooleanBuilder::with_capacity(self.len());
+        let suffix = if invert { "_is_not_null" } else { "_is_null" };
+        for i in 0..self.len() {
+            let is_null = self.data.is_null(i);
+            builder.append_value(if invert { !is_null } else { is_null });
+        }
+        Ok(Series::new(
+            format!("{}{}", self.name(), suffix),
+            Arc::new(builder.finish()),
+        ))
     }
 }
