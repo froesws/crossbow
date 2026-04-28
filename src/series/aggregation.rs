@@ -7,6 +7,7 @@ use arrow::datatypes::DataType;
 use arrow::array::Array;
 use crate::error::CrossbowError;
 use crate::series::Series;
+use crate::expected_array;
 
 impl Series {
     /// Sum of all non-null values. Returns `0.0` if all values are null.
@@ -14,7 +15,7 @@ impl Series {
         match self.dtype() {
             DataType::Int32 => {
                 let arr = self.as_primitive::<arrow::array::Int32Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
+                    || expected_array("Int32Array"),
                 )?;
                 let mut sum = 0i64;
                 for i in 0..arr.len() {
@@ -26,7 +27,7 @@ impl Series {
             }
             DataType::Float64 => {
                 let arr = self.as_primitive::<arrow::array::Float64Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
+                    || expected_array("Float64Array"),
                 )?;
                 let mut sum_val = 0.0;
                 for i in 0..arr.len() {
@@ -66,7 +67,7 @@ impl Series {
         match self.dtype() {
             DataType::Int32 => {
                 let arr = self.as_primitive::<arrow::array::Int32Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
+                    || expected_array("Int32Array"),
                 )?;
                 let mut min_val: Option<i32> = None;
                 for i in 0..arr.len() {
@@ -82,7 +83,7 @@ impl Series {
             }
             DataType::Float64 => {
                 let arr = self.as_primitive::<arrow::array::Float64Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
+                    || expected_array("Float64Array"),
                 )?;
                 let mut min_val: Option<f64> = None;
                 for i in 0..arr.len() {
@@ -107,7 +108,7 @@ impl Series {
         match self.dtype() {
             DataType::Int32 => {
                 let arr = self.as_primitive::<arrow::array::Int32Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
+                    || expected_array("Int32Array"),
                 )?;
                 let mut max_val: Option<i32> = None;
                 for i in 0..arr.len() {
@@ -123,7 +124,7 @@ impl Series {
             }
             DataType::Float64 => {
                 let arr = self.as_primitive::<arrow::array::Float64Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
+                    || expected_array("Float64Array"),
                 )?;
                 let mut max_val: Option<f64> = None;
                 for i in 0..arr.len() {
@@ -185,7 +186,7 @@ impl Series {
         match self.dtype() {
             DataType::Int32 => {
                 let arr = self.as_primitive::<arrow::array::Int32Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
+                    || expected_array("Int32Array"),
                 )?;
                 for i in 0..arr.len() {
                     if arr.is_valid(i) {
@@ -196,7 +197,7 @@ impl Series {
             }
             DataType::Float64 => {
                 let arr = self.as_primitive::<arrow::array::Float64Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
+                    || expected_array("Float64Array"),
                 )?;
                 for i in 0..arr.len() {
                     if arr.is_valid(i) {

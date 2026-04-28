@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use arrow::array::Array;
-use crate::{CrossbowError, DataFrame, Series};
+use crate::{CrossbowError, DataFrame, Series, expected_array};
 
 impl DataFrame {
     /// Groups rows by the values in a column.
@@ -66,7 +66,7 @@ impl GroupedDataFrame {
             match agg_col.dtype() {
                 arrow::datatypes::DataType::Int32 => {
                     let arr = agg_col.as_primitive::<arrow::array::Int32Array>()
-                        .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int32Array".to_string()))?;
+                        .ok_or_else(|| expected_array("Int32Array"))?;
                     let mut sum = 0i64;
                     for &idx in indices {
                         if arr.is_valid(idx) {
@@ -77,7 +77,7 @@ impl GroupedDataFrame {
                 }
                 arrow::datatypes::DataType::Float64 => {
                     let arr = agg_col.as_primitive::<arrow::array::Float64Array>()
-                        .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float64Array".to_string()))?;
+                        .ok_or_else(|| expected_array("Float64Array"))?;
                     let mut sum = 0.0;
                     for &idx in indices {
                         if arr.is_valid(idx) {
@@ -111,7 +111,7 @@ impl GroupedDataFrame {
             match agg_col.dtype() {
                 arrow::datatypes::DataType::Int32 => {
                     let arr = agg_col.as_primitive::<arrow::array::Int32Array>()
-                        .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int32Array".to_string()))?;
+                        .ok_or_else(|| expected_array("Int32Array"))?;
                     let mut sum = 0.0;
                     let mut count = 0;
                     for &idx in indices {
@@ -125,7 +125,7 @@ impl GroupedDataFrame {
                 }
                 arrow::datatypes::DataType::Float64 => {
                     let arr = agg_col.as_primitive::<arrow::array::Float64Array>()
-                        .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float64Array".to_string()))?;
+                        .ok_or_else(|| expected_array("Float64Array"))?;
                     let mut sum = 0.0;
                     let mut count = 0;
                     for &idx in indices {

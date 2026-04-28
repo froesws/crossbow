@@ -5,7 +5,7 @@ use arrow::datatypes::DataType;
 use arrow::array::Array;
 use crate::error::CrossbowError;
 use crate::series::Series;
-use crate::{build_column, build_string_column};
+use crate::{build_column, build_string_column, expected_array};
 
 impl Series {
     /// Returns a boolean `Series` indicating which elements are null.
@@ -35,10 +35,10 @@ impl Series {
         match self.dtype() {
             DataType::Int32 => {
                 let arr1 = self.as_primitive::<arrow::array::Int32Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
+                    || expected_array("Int32Array"),
                 )?;
                 let arr2 = fill_value.as_primitive::<arrow::array::Int32Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
+                    || expected_array("Int32Array"),
                 )?;
                 let mut builder = arrow::array::Int32Builder::with_capacity(self.len());
                 for i in 0..arr1.len() {
@@ -54,10 +54,10 @@ impl Series {
             }
             DataType::Float64 => {
                 let arr1 = self.as_primitive::<arrow::array::Float64Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
+                    || expected_array("Float64Array"),
                 )?;
                 let arr2 = fill_value.as_primitive::<arrow::array::Float64Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
+                    || expected_array("Float64Array"),
                 )?;
                 let mut builder = arrow::array::Float64Builder::with_capacity(self.len());
                 for i in 0..arr1.len() {

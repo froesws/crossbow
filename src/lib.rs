@@ -15,3 +15,4 @@ pub use series::Series;
 pub use dataframe::DataFrame;
 pub use io::csv::{read_csv, write_csv};
 pub use io::parquet::{read_parquet, write_parquet};
+pub use utils::expected_array;

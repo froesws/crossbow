@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use arrow::array::Array;
 use crate::{CrossbowError, DataFrame, Series};
-use crate::{build_column, build_string_column};
+use crate::{build_column, build_string_column, expected_array};
 
 impl DataFrame {
     /// Sorts the `DataFrame` by a column.
@@ -18,7 +18,7 @@ impl DataFrame {
         match sort_col.dtype() {
             arrow::datatypes::DataType::Int32 => {
                 let arr = sort_col.as_primitive::<arrow::array::Int32Array>()
-                    .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int32Array".to_string()))?;
+                    .ok_or_else(|| expected_array("Int32Array"))?;
                 if ascending {
                     indices.sort_by(|&a, &b| {
                         let val_a = if arr.is_valid(a) { Some(arr.value(a)) } else { None };
@@ -35,7 +35,7 @@ impl DataFrame {
             }
             arrow::datatypes::DataType::Int64 => {
                 let arr = sort_col.as_primitive::<arrow::array::Int64Array>()
-                    .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int64Array".to_string()))?;
+                    .ok_or_else(|| expected_array("Int64Array"))?;
                 if ascending {
                     indices.sort_by(|&a, &b| {
                         let val_a = if arr.is_valid(a) { Some(arr.value(a)) } else { None };
@@ -52,7 +52,7 @@ impl DataFrame {
             }
             arrow::datatypes::DataType::Float32 => {
                 let arr = sort_col.as_primitive::<arrow::array::Float32Array>()
-                    .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float32Array".to_string()))?;
+                    .ok_or_else(|| expected_array("Float32Array"))?;
                 if ascending {
                     indices.sort_by(|&a, &b| {
                         let val_a = if arr.is_valid(a) { Some(arr.value(a)) } else { None };
@@ -69,7 +69,7 @@ impl DataFrame {
             }
             arrow::datatypes::DataType::Float64 => {
                 let arr = sort_col.as_primitive::<arrow::array::Float64Array>()
-                    .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float64Array".to_string()))?;
+                    .ok_or_else(|| expected_array("Float64Array"))?;
 
                 if ascending {
                     indices.sort_by(|&a, &b| {
@@ -87,7 +87,7 @@ impl DataFrame {
             }
             arrow::datatypes::DataType::Utf8 => {
                 let arr = sort_col.data().as_any().downcast_ref::<arrow::array::StringArray>()
-                    .ok_or_else(|| CrossbowError::TypeMismatch("Expected StringArray".to_string()))?;
+                    .ok_or_else(|| expected_array("StringArray"))?;
 
                 if ascending {
                     indices.sort_by(|&a, &b| {

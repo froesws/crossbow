@@ -10,6 +10,7 @@ use arrow::datatypes::DataType;
 use arrow::array::Array;
 use crate::error::CrossbowError;
 use crate::series::Series;
+use crate::expected_array;
 
 impl Series {
     /// Element-wise addition: `self[i] + other[i]`.
@@ -78,9 +79,9 @@ where
     match (s1.dtype(), s2.dtype()) {
         (DataType::Int32, DataType::Int32) => {
             let arr1 = s1.as_primitive::<arrow::array::Int32Array>()
-                .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int32Array".to_string()))?;
+                .ok_or_else(|| expected_array("Int32Array"))?;
             let arr2 = s2.as_primitive::<arrow::array::Int32Array>()
-                .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int32Array".to_string()))?;
+                .ok_or_else(|| expected_array("Int32Array"))?;
 
             if check_division_by_zero {
                 for i in 0..arr2.len() {
@@ -111,9 +112,9 @@ where
         }
         (DataType::Float64, DataType::Float64) => {
             let arr1 = s1.as_primitive::<arrow::array::Float64Array>()
-                .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float64Array".to_string()))?;
+                .ok_or_else(|| expected_array("Float64Array"))?;
             let arr2 = s2.as_primitive::<arrow::array::Float64Array>()
-                .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float64Array".to_string()))?;
+                .ok_or_else(|| expected_array("Float64Array"))?;
 
             if check_division_by_zero {
                 for i in 0..arr2.len() {
@@ -159,9 +160,9 @@ where
     match (s1.dtype(), s2.dtype()) {
         (DataType::Int32, DataType::Int32) => {
             let arr1 = s1.as_primitive::<arrow::array::Int32Array>()
-                .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int32Array".to_string()))?;
+                .ok_or_else(|| expected_array("Int32Array"))?;
             let arr2 = s2.as_primitive::<arrow::array::Int32Array>()
-                .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int32Array".to_string()))?;
+                .ok_or_else(|| expected_array("Int32Array"))?;
 
             if check_division_by_zero {
                 for i in 0..arr2.len() {
