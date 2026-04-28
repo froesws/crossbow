@@ -288,3 +288,228 @@ fn test_parquet_roundtrip() {
     assert_eq!(df.shape(), reloaded.shape());
     assert_eq!(df.get_column_names(), reloaded.get_column_names());
 }
+
+// ============================================================================
+// NEW TESTS: EDGE CASES & HIGH PRIORITY COVERAGE
+// ============================================================================
+
+// --- CSV EDGE CASES ---
+
+#[test]
+fn test_csv_single_row() {
+    ensure_output_dir();
+    let s1 = Series::from("id", vec![1]);
+    let s2 = Series::from("name", vec!["Alice"]);
+    let df = DataFrame::new(vec![s1, s2]).unwrap();
+    
+    let out = format!("{}/single_row_test.csv", OUTPUT_DIR);
+    write_csv(&df, &out).unwrap();
+    
+    let rows = count_csv_rows(&out);
+    assert_eq!(rows, 1); // Only the data row (header + 1 data row)
+    
+    let reloaded = read_csv(&out).unwrap();
+    assert_eq!(reloaded.shape(), (1, 2));
+}
+
+#[test]
+fn test_csv_single_column() {
+    ensure_output_dir();
+    let s = Series::from("numbers", vec![1, 2, 3, 4, 5]);
+    let df = DataFrame::new(vec![s]).unwrap();
+    
+    let out = format!("{}/single_column_test.csv", OUTPUT_DIR);
+    write_csv(&df, &out).unwrap();
+    
+    let reloaded = read_csv(&out).unwrap();
+    assert_eq!(reloaded.shape(), (5, 1));
+    assert_eq!(reloaded.get_column_names(), vec!["numbers"]);
+}
+
+#[test]
+fn test_csv_null_values_format() {
+    ensure_output_dir();
+    let s1: Vec<Option<i32>> = vec![Some(1), None, Some(3)];
+    let s2: Vec<Option<&str>> = vec![Some("a"), Some("b"), None];
+    
+    let s1_series = Series::from("ints", s1);
+    let s2_series = Series::from("strs", s2);
+    let df = DataFrame::new(vec![s1_series, s2_series]).unwrap();
+    
+    let out = format!("{}/nulls_test.csv", OUTPUT_DIR);
+    write_csv(&df, &out).unwrap();
+    
+    // Verify roundtrip preserves shape
+    let reloaded = read_csv(&out).unwrap();
+    assert_eq!(reloaded.shape(), df.shape());
+}
+
+#[test]
+fn test_csv_large_numbers() {
+    ensure_output_dir();
+    let s = Series::from("large", vec![i32::MAX, i32::MIN, 0, -1000, 999999]);
+    let df = DataFrame::new(vec![s]).unwrap();
+    
+    let out = format!("{}/large_numbers.csv", OUTPUT_DIR);
+    write_csv(&df, &out).unwrap();
+    
+    let reloaded = read_csv(&out).unwrap();
+    assert_eq!(reloaded.shape(), (5, 1));
+    
+    // Verify values are preserved
+    for i in 0..5 {
+        let val: i32 = reloaded.select("large").unwrap().value_at(i).unwrap().parse().unwrap();
+        assert!(i32::MIN <= val && val <= i32::MAX);
+    }
+}
+
+#[test]
+fn test_csv_many_columns() {
+    ensure_output_dir();
+    
+    let mut cols = vec![];
+    for i in 0..10 {
+        let name = format!("col_{}", i);
+        let col = Series::from(&name, vec![i as i32; 5]);
+        cols.push(col);
+    }
+    
+    let df = DataFrame::new(cols).unwrap();
+    let out = format!("{}/many_columns.csv", OUTPUT_DIR);
+    write_csv(&df, &out).unwrap();
+    
+    let reloaded = read_csv(&out).unwrap();
+    assert_eq!(reloaded.shape(), (5, 10));
+}
+
+#[test]
+fn test_csv_consecutive_operations() {
+    ensure_output_dir();
+    
+    // Load original
+    let df = load_test_data();
+    
+    // Filter
+    let mask = make_int_mask(df.select("age").unwrap(), |v| v > 40);
+    let filtered = df.filter_by_mask(&mask).unwrap();
+    
+    // Write filtered
+    let out1 = format!("{}/consecutive_filtered.csv", OUTPUT_DIR);
+    write_csv(&filtered, &out1).unwrap();
+    
+    // Read back
+    let reloaded = read_csv(&out1).unwrap();
+    
+    // Sort
+    let sorted = reloaded.sort_by("age", true).unwrap();
+    
+    // Write sorted
+    let out2 = format!("{}/consecutive_sorted.csv", OUTPUT_DIR);
+    write_csv(&sorted, &out2).unwrap();
+    
+    // Verify final result
+    let final_df = read_csv(&out2).unwrap();
+    let ages = final_df.select("age").unwrap();
+    for i in 1..100.min(ages.len()) {
+        let prev: i32 = ages.value_at(i - 1).unwrap().parse().unwrap();
+        let curr: i32 = ages.value_at(i).unwrap().parse().unwrap();
+        assert!(prev <= curr);
+    }
+}
+
+// --- PARQUET EDGE CASES ---
+
+#[test]
+fn test_parquet_single_row() {
+    ensure_output_dir();
+    let s1 = Series::from("id", vec![42]);
+    let s2 = Series::from("val", vec![3.14]);
+    let df = DataFrame::new(vec![s1, s2]).unwrap();
+    
+    let out = format!("{}/parquet_single_row.parquet", OUTPUT_DIR);
+    crossbow::io::parquet::write_parquet(&df, &out).unwrap();
+    
+    let reloaded = crossbow::io::parquet::read_parquet(&out).unwrap();
+    assert_eq!(reloaded.shape(), (1, 2));
+}
+
+#[test]
+fn test_parquet_nulls_preserved() {
+    ensure_output_dir();
+    let s1: Vec<Option<i32>> = vec![Some(1), None, Some(3), None, Some(5)];
+    let df = DataFrame::new(vec![Series::from("ints", s1)]).unwrap();
+    
+    let out = format!("{}/parquet_nulls.parquet", OUTPUT_DIR);
+    crossbow::io::parquet::write_parquet(&df, &out).unwrap();
+    
+    let reloaded = crossbow::io::parquet::read_parquet(&out).unwrap();
+    assert_eq!(reloaded.shape(), df.shape());
+}
+
+#[test]
+fn test_parquet_all_types() {
+    ensure_output_dir();
+    let s1 = Series::from("ints", vec![1, 2, 3]);
+    let s2 = Series::from("floats", vec![1.1, 2.2, 3.3]);
+    let s3 = Series::from("strings", vec!["a", "b", "c"]);
+    let df = DataFrame::new(vec![s1, s2, s3]).unwrap();
+    
+    let out = format!("{}/parquet_all_types.parquet", OUTPUT_DIR);
+    crossbow::io::parquet::write_parquet(&df, &out).unwrap();
+    
+    let reloaded = crossbow::io::parquet::read_parquet(&out).unwrap();
+    assert_eq!(reloaded.shape(), (3, 3));
+    assert_eq!(reloaded.get_column_names(), vec!["ints", "floats", "strings"]);
+}
+
+// --- CROSS FORMAT TESTS ---
+
+#[test]
+fn test_csv_to_parquet_conversion() {
+    ensure_output_dir();
+    
+    let df = load_test_data();
+    
+    // Write as CSV
+    let csv_out = format!("{}/conversion_test.csv", OUTPUT_DIR);
+    write_csv(&df, &csv_out).unwrap();
+    
+    // Read from CSV
+    let from_csv = read_csv(&csv_out).unwrap();
+    
+    // Write as Parquet
+    let parquet_out = format!("{}/conversion_test.parquet", OUTPUT_DIR);
+    crossbow::io::parquet::write_parquet(&from_csv, &parquet_out).unwrap();
+    
+    // Read from Parquet
+    let from_parquet = crossbow::io::parquet::read_parquet(&parquet_out).unwrap();
+    
+    // Verify shapes match
+    assert_eq!(df.shape(), from_csv.shape());
+    assert_eq!(df.shape(), from_parquet.shape());
+}
+
+#[test]
+fn test_parquet_to_csv_conversion() {
+    ensure_output_dir();
+    
+    let df = load_test_data();
+    
+    // Write as Parquet
+    let parquet_out = format!("{}/parquet_to_csv.parquet", OUTPUT_DIR);
+    crossbow::io::parquet::write_parquet(&df, &parquet_out).unwrap();
+    
+    // Read from Parquet
+    let from_parquet = crossbow::io::parquet::read_parquet(&parquet_out).unwrap();
+    
+    // Write as CSV
+    let csv_out = format!("{}/parquet_to_csv.csv", OUTPUT_DIR);
+    write_csv(&from_parquet, &csv_out).unwrap();
+    
+    // Read from CSV
+    let from_csv = read_csv(&csv_out).unwrap();
+    
+    // Verify shapes match
+    assert_eq!(df.shape(), from_parquet.shape());
+    assert_eq!(df.shape(), from_csv.shape());
+}

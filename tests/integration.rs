@@ -3,7 +3,7 @@ use std::fs::File;
 use arrow::csv::ReaderBuilder;
 use arrow::datatypes::*;
 use arrow::array::*;
-use crossbow::{DataFrame, Series};
+use crossbow::{DataFrame, Series, read_csv, write_csv};
 
 fn load_test_data() -> DataFrame {
     let schema = Arc::new(Schema::new(vec![
@@ -551,4 +551,142 @@ fn test_filter_by_boolean_false_all() {
     let all_false = Series::new("none", Arc::new(BooleanArray::from(vec![false; 2000])));
     let filtered = df.filter_by_mask(&all_false).unwrap();
     assert_eq!(filtered.shape(), (0, 5));
+}
+
+// ============================================================================
+// NEW TESTS: I/O EDGE CASES & HIGH PRIORITY COVERAGE
+// ============================================================================
+
+// --- CSV READ/WRITE EDGE CASES ---
+
+#[test]
+fn test_csv_roundtrip_preserves_data() {
+    let df = load_test_data();
+    let output_path = "tests/output/roundtrip_test.csv";
+    
+    // Write to CSV
+    write_csv(&df, output_path).unwrap();
+    
+    // Read back from CSV
+    let df_read = read_csv(output_path).unwrap();
+    
+    // Verify shape is preserved
+    assert_eq!(df.shape(), df_read.shape());
+    
+    // Verify column names are preserved
+    assert_eq!(df.get_column_names(), df_read.get_column_names());
+    
+    // Verify sample data rows match
+    for i in 0..10 {
+        let orig_row = df.get_row(i).unwrap();
+        let read_row = df_read.get_row(i).unwrap();
+        assert_eq!(orig_row, read_row);
+    }
+}
+
+#[test]
+fn test_write_csv_empty_dataframe() {
+    let empty_s1: Series = Series::from("col A", Vec::<i32>::new());
+    let empty_s2: Series = Series::from("col B", Vec::<&str>::new());
+    let empty_df = DataFrame::new(vec![empty_s1, empty_s2]).unwrap();
+    
+    let output_path = "tests/output/empty_dataframe.csv";
+    assert!(write_csv(&empty_df, output_path).is_ok());
+    
+    // Read it back - should have columns but no rows
+    let df_read = read_csv(output_path).unwrap();
+    assert_eq!(df_read.shape(), (0, 2));
+    assert_eq!(df_read.get_column_names(), vec!["col A", "col B"]);
+}
+
+#[test]
+fn test_csv_preserves_nulls() {
+    let s1: Vec<Option<i32>> = vec![Some(1), None, Some(3), None, Some(5)];
+    let s2: Vec<Option<&str>> = vec![Some("a"), Some("b"), None, Some("d"), Some("e")];
+    
+    let s1_series = Series::from("ints", s1);
+    let s2_series = Series::from("strs", s2);
+    let df = DataFrame::new(vec![s1_series, s2_series]).unwrap();
+    
+    let output_path = "tests/output/nulls_test.csv";
+    write_csv(&df, output_path).unwrap();
+    
+    let df_read = read_csv(output_path).unwrap();
+    assert_eq!(df.shape(), df_read.shape());
+}
+
+#[test]
+fn test_write_csv_filtered_result() {
+    let df = load_test_data();
+    
+    // Filter to get subset
+    let age = df.select("age").unwrap();
+    let mask = make_bool_mask_int32(age, |v| v > 50);
+    let filtered = df.filter_by_mask(&mask).unwrap();
+    
+    let output_path = "tests/output/filtered_over_50.csv";
+    write_csv(&filtered, output_path).unwrap();
+    
+    let df_read = read_csv(output_path).unwrap();
+    assert_eq!(df_read.shape().1, 5); // Same number of columns
+    assert!(df_read.shape().0 < df.shape().0); // Fewer rows
+    assert!(df_read.shape().0 > 0); // But not empty
+}
+
+#[test]
+fn test_csv_roundtrip_sorted() {
+    let df = load_test_data();
+    let sorted = df.sort_by("age", true).unwrap();
+    
+    let output_path = "tests/output/sorted_roundtrip.csv";
+    write_csv(&sorted, output_path).unwrap();
+    
+    let df_read = read_csv(output_path).unwrap();
+    
+    // Verify sorting is preserved
+    let age_col = df_read.select("age").unwrap();
+    for i in 1..100.min(age_col.len()) {
+        let prev: i32 = age_col.value_at(i - 1).unwrap().parse().unwrap();
+        let curr: i32 = age_col.value_at(i).unwrap().parse().unwrap();
+        assert!(prev <= curr);
+    }
+}
+
+#[test]
+fn test_csv_roundtrip_grouped() {
+    let df = load_test_data();
+    let grouped = df.group_by("position").unwrap();
+    let result = grouped.count().unwrap();
+    
+    let output_path = "tests/output/grouped_roundtrip.csv";
+    write_csv(&result, output_path).unwrap();
+    
+    let df_read = read_csv(output_path).unwrap();
+    assert_eq!(df_read.shape(), result.shape());
+}
+
+#[test]
+fn test_write_csv_single_row() {
+    let s1 = Series::from("val", vec![42]);
+    let s2 = Series::from("text", vec!["hello"]);
+    let df = DataFrame::new(vec![s1, s2]).unwrap();
+    
+    let output_path = "tests/output/single_row.csv";
+    write_csv(&df, output_path).unwrap();
+    
+    let df_read = read_csv(output_path).unwrap();
+    assert_eq!(df_read.shape(), (1, 2));
+}
+
+#[test]
+fn test_write_csv_single_column() {
+    let s = Series::from("only_col", vec![1, 2, 3, 4, 5]);
+    let df = DataFrame::new(vec![s]).unwrap();
+    
+    let output_path = "tests/output/single_column.csv";
+    write_csv(&df, output_path).unwrap();
+    
+    let df_read = read_csv(output_path).unwrap();
+    assert_eq!(df_read.shape(), (5, 1));
+    assert_eq!(df_read.get_column_names(), vec!["only_col"]);
 }
