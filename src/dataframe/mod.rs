@@ -12,6 +12,7 @@ use crate::{CrossbowError, Series};
 pub mod filter;
 pub mod sort;
 pub mod groupby;
+pub mod join;
 
 #[cfg(test)]
 mod unit_test;

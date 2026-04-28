@@ -210,6 +210,30 @@ let sum     = grouped.sum("yield").unwrap();       // sum of yield per group
 let avg     = grouped.mean("salary").unwrap();     // mean salary per group
 ```
 
+### Joins
+
+Three join types supported. The right-hand join key column is excluded from the result. If a right column name collides with a left column, `_right` is appended.
+
+```rust
+let employees  = read_csv("employees.csv").unwrap();
+let departments = read_csv("departments.csv").unwrap();
+
+// Inner join — only rows with matching keys on both sides
+let inner = employees.join_inner(&departments, "dept_id", "dept_id").unwrap();
+
+// Left join — all left rows, nulls for unmatched right
+let left = employees.join_left(&departments, "dept_id", "dept_id").unwrap();
+
+// Outer join — all rows from both sides, nulls where no match
+let outer = employees.join_outer(&departments, "dept_id", "dept_id").unwrap();
+```
+
+| Join type | Left rows | Right rows | Unmatched |
+|---|---|---|---|
+| `join_inner` | matched only | matched only | dropped |
+| `join_left` | all | matched | right cols null |
+| `join_outer` | all | all | null-filled |
+
 ## I/O — Reading and Writing Files
 
 ### CSV
