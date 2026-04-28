@@ -11,3 +11,6 @@ pub use error::CrossbowError;
 // Legacy modules (main implementation)
 pub mod series;
 pub use series::Series;
+
+pub mod dataframe;
+pub use dataframe::DataFrame;
