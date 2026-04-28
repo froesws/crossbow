@@ -116,7 +116,8 @@ assert_eq!(cleaned.len(), 2);
 
 ### Aggregation
 
-All aggregation ignores null values.
+All aggregation ignores null values. `mean()`, `std()`, and `var()` return
+`f64::NAN` for empty series or when fewer than 2 non-null values exist.
 
 ```rust
 let s = Series::from("vals", vec![10i32, 20, 30, 40]);
@@ -127,8 +128,8 @@ s.min().unwrap();                               // Some(10.0)
 s.max().unwrap();                               // Some(40.0)
 s.count();                                      // 4
 s.count_non_null().unwrap();                    // 4
-s.std().unwrap();                               // sample std dev
-s.var().unwrap();                               // sample variance
+s.std().unwrap();                               // sample std dev (NaN if < 2 values)
+s.var().unwrap();                               // sample variance (NaN if < 2 values)
 ```
 
 ## DataFrame — Tabular Data
