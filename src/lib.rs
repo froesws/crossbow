@@ -20,5 +20,4 @@ pub use series::Series;
 pub mod dataframe;
 pub use dataframe::DataFrame;
 
-// Operations modules (SRP-based organization - in development) 
-pub mod ops;
+
