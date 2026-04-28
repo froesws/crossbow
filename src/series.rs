@@ -185,6 +185,67 @@ impl_into_series_for_numerics!(u64, arrow::array::UInt64Array);
 impl_into_series_for_numerics!(f32, arrow::array::Float32Array);
 impl_into_series_for_numerics!(f64, arrow::array::Float64Array);
 
+macro_rules! impl_comparison_op {
+    ($func_name:ident, $kernel:path, $doc:expr) => {
+        #[doc = $doc]
+        pub fn $func_name<T>(&self, value: T) -> Result<Series, CrossbowError>
+        where
+            T: arrow::datatypes::ArrowNumericType,
+            T: arrow::array::Datum,
+            T::Native: arrow::datatypes::ArrowNativeType,
+        {
+            let array = self
+                .data
+                .as_any()
+                .downcast_ref::<arrow::array::PrimitiveArray<T>>()
+                .ok_or_else(|| {
+                    CrossbowError::OperationNotSupported(format!(
+                        "operation '{}' not supported for dtype {:?}",
+                        stringify!($func_name),
+                        self.dtype()
+                    ))
+                })?;
+
+            let boolean_array = $kernel(array, &value)?;
+
+            Ok(Series::new(self.name(), std::sync::Arc::new(boolean_array)))
+        }
+    };
+}
+
+impl Series {
+    impl_comparison_op!(
+        gt,
+        arrow::compute::kernels::cmp::gt,
+        "Compares the Series with a scalar value (greater than)."
+    );
+    impl_comparison_op!(
+        lt,
+        arrow::compute::kernels::cmp::lt,
+        "Compares the Series with a scalar value (less than)."
+    );
+    impl_comparison_op!(
+        eq,
+        arrow::compute::kernels::cmp::eq,
+        "Compares the Series with a scalar value (equal to)."
+    );
+    impl_comparison_op!(
+        neq,
+        arrow::compute::kernels::cmp::neq,
+        "Compares the Series with a scalar value (not equal to)."
+    );
+    impl_comparison_op!(
+        gt_eq,
+        arrow::compute::kernels::cmp::gt_eq,
+        "Compares the Series with a scalar value (greater than or equal to)."
+    );
+    impl_comparison_op!(
+        lt_eq,
+        arrow::compute::kernels::cmp::lt_eq,
+        "Compares the Series with a scalar value (less than or equal to)."
+    );
+}
+
 impl std::fmt::Display for Series {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         const HEAD: usize = 5;
