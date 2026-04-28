@@ -28,7 +28,7 @@ impl DataFrame {
                 arrow::datatypes::DataType::Int32 => {
                     let arr = series.as_primitive::<arrow::array::Int32Array>()
                         .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int32Array".to_string()))?;
-                    let mut b = arrow::array::Int32Builder::new();
+                    let mut b = arrow::array::Int32Builder::with_capacity(indices.len());
                     for &idx in &indices {
                         if arr.is_valid(idx) {
                             b.append_value(arr.value(idx));
@@ -42,7 +42,7 @@ impl DataFrame {
                 arrow::datatypes::DataType::Int64 => {
                     let arr = series.as_primitive::<arrow::array::Int64Array>()
                         .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int64Array".to_string()))?;
-                    let mut b = arrow::array::Int64Builder::new();
+                    let mut b = arrow::array::Int64Builder::with_capacity(indices.len());
                     for &idx in &indices {
                         if arr.is_valid(idx) {
                             b.append_value(arr.value(idx));
@@ -56,7 +56,7 @@ impl DataFrame {
                 arrow::datatypes::DataType::Float32 => {
                     let arr = series.as_primitive::<arrow::array::Float32Array>()
                         .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float32Array".to_string()))?;
-                    let mut b = arrow::array::Float32Builder::new();
+                    let mut b = arrow::array::Float32Builder::with_capacity(indices.len());
                     for &idx in &indices {
                         if arr.is_valid(idx) {
                             b.append_value(arr.value(idx));
@@ -70,7 +70,7 @@ impl DataFrame {
                 arrow::datatypes::DataType::Float64 => {
                     let arr = series.as_primitive::<arrow::array::Float64Array>()
                         .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float64Array".to_string()))?;
-                    let mut b = arrow::array::Float64Builder::new();
+                    let mut b = arrow::array::Float64Builder::with_capacity(indices.len());
                     for &idx in &indices {
                         if arr.is_valid(idx) {
                             b.append_value(arr.value(idx));
@@ -84,7 +84,7 @@ impl DataFrame {
                 arrow::datatypes::DataType::Utf8 => {
                     let arr = series.data().as_any().downcast_ref::<arrow::array::StringArray>()
                         .ok_or_else(|| CrossbowError::TypeMismatch("Expected StringArray".to_string()))?;
-                    let mut b = arrow::array::StringBuilder::new();
+                    let mut b = arrow::array::StringBuilder::with_capacity(indices.len(), indices.len() * 32);
                     for &idx in &indices {
                         if arr.is_valid(idx) {
                             b.append_value(arr.value(idx));

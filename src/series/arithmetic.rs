@@ -29,7 +29,7 @@ impl Series {
                 let arr2 = other.as_primitive::<arrow::array::Int32Array>().ok_or_else(
                     || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
                 )?;
-                let mut builder = arrow::array::Int32Builder::new();
+                let mut builder = arrow::array::Int32Builder::with_capacity(arr1.len());
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
                         match arr1.value(i).checked_add(arr2.value(i)) {
@@ -51,7 +51,7 @@ impl Series {
                 let arr2 = other.as_primitive::<arrow::array::Float64Array>().ok_or_else(
                     || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
                 )?;
-                let mut builder = arrow::array::Float64Builder::new();
+                let mut builder = arrow::array::Float64Builder::with_capacity(arr1.len());
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
                         builder.append_value(arr1.value(i) + arr2.value(i));
@@ -81,7 +81,7 @@ impl Series {
                 let arr2 = other.as_primitive::<arrow::array::Int32Array>().ok_or_else(
                     || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
                 )?;
-                let mut builder = arrow::array::Int32Builder::new();
+                let mut builder = arrow::array::Int32Builder::with_capacity(arr1.len());
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
                         match arr1.value(i).checked_sub(arr2.value(i)) {
@@ -103,7 +103,7 @@ impl Series {
                 let arr2 = other.as_primitive::<arrow::array::Float64Array>().ok_or_else(
                     || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
                 )?;
-                let mut builder = arrow::array::Float64Builder::new();
+                let mut builder = arrow::array::Float64Builder::with_capacity(arr1.len());
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
                         builder.append_value(arr1.value(i) - arr2.value(i));
@@ -133,7 +133,7 @@ impl Series {
                 let arr2 = other.as_primitive::<arrow::array::Int32Array>().ok_or_else(
                     || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
                 )?;
-                let mut builder = arrow::array::Int32Builder::new();
+                let mut builder = arrow::array::Int32Builder::with_capacity(arr1.len());
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
                         match arr1.value(i).checked_mul(arr2.value(i)) {
@@ -155,7 +155,7 @@ impl Series {
                 let arr2 = other.as_primitive::<arrow::array::Float64Array>().ok_or_else(
                     || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
                 )?;
-                let mut builder = arrow::array::Float64Builder::new();
+                let mut builder = arrow::array::Float64Builder::with_capacity(arr1.len());
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
                         builder.append_value(arr1.value(i) * arr2.value(i));
@@ -194,7 +194,7 @@ impl Series {
                     }
                 }
 
-                let mut builder = arrow::array::Int32Builder::new();
+                let mut builder = arrow::array::Int32Builder::with_capacity(arr1.len());
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
                         builder.append_value(arr1.value(i) / arr2.value(i));
@@ -218,7 +218,7 @@ impl Series {
                     }
                 }
 
-                let mut builder = arrow::array::Float64Builder::new();
+                let mut builder = arrow::array::Float64Builder::with_capacity(arr1.len());
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
                         builder.append_value(arr1.value(i) / arr2.value(i));
@@ -255,7 +255,7 @@ impl Series {
                     }
                 }
 
-                let mut builder = arrow::array::Int32Builder::new();
+                let mut builder = arrow::array::Int32Builder::with_capacity(arr1.len());
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
                         builder.append_value(arr1.value(i) % arr2.value(i));

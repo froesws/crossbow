@@ -9,7 +9,7 @@ use crate::series::Series;
 impl Series {
     /// Returns a boolean `Series` indicating which elements are null.
     pub fn is_null(&self) -> Result<Series, CrossbowError> {
-        let mut builder = arrow::array::BooleanBuilder::new();
+        let mut builder = arrow::array::BooleanBuilder::with_capacity(self.len());
         for i in 0..self.len() {
             builder.append_value(self.data.is_null(i));
         }
@@ -18,7 +18,7 @@ impl Series {
 
     /// Returns a boolean `Series` indicating which elements are **not** null.
     pub fn is_not_null(&self) -> Result<Series, CrossbowError> {
-        let mut builder = arrow::array::BooleanBuilder::new();
+        let mut builder = arrow::array::BooleanBuilder::with_capacity(self.len());
         for i in 0..self.len() {
             builder.append_value(!self.data.is_null(i));
         }
@@ -47,7 +47,7 @@ impl Series {
                 let arr2 = fill_value.as_primitive::<arrow::array::Int32Array>().ok_or_else(
                     || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
                 )?;
-                let mut builder = arrow::array::Int32Builder::new();
+                let mut builder = arrow::array::Int32Builder::with_capacity(self.len());
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) {
                         builder.append_value(arr1.value(i));
@@ -66,7 +66,7 @@ impl Series {
                 let arr2 = fill_value.as_primitive::<arrow::array::Float64Array>().ok_or_else(
                     || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
                 )?;
-                let mut builder = arrow::array::Float64Builder::new();
+                let mut builder = arrow::array::Float64Builder::with_capacity(self.len());
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) {
                         builder.append_value(arr1.value(i));
@@ -93,7 +93,7 @@ impl Series {
                 let arr = self.as_primitive::<arrow::array::Int32Array>().ok_or_else(
                     || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
                 )?;
-                let mut builder = arrow::array::Int32Builder::new();
+                let mut builder = arrow::array::Int32Builder::with_capacity(self.len());
                 for i in 0..arr.len() {
                     if arr.is_valid(i) {
                         builder.append_value(arr.value(i));
@@ -105,7 +105,7 @@ impl Series {
                 let arr = self.as_primitive::<arrow::array::Float64Array>().ok_or_else(
                     || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
                 )?;
-                let mut builder = arrow::array::Float64Builder::new();
+                let mut builder = arrow::array::Float64Builder::with_capacity(self.len());
                 for i in 0..arr.len() {
                     if arr.is_valid(i) {
                         builder.append_value(arr.value(i));
@@ -116,7 +116,7 @@ impl Series {
             DataType::Utf8 => {
                 let arr = self.data.as_any().downcast_ref::<arrow::array::StringArray>()
                     .ok_or_else(|| CrossbowError::TypeMismatch("Expected StringArray".to_string()))?;
-                let mut builder = arrow::array::StringBuilder::new();
+                let mut builder = arrow::array::StringBuilder::with_capacity(self.len(), self.len() * 32);
                 for i in 0..arr.len() {
                     if arr.is_valid(i) {
                         builder.append_value(arr.value(i));
