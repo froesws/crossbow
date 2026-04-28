@@ -1,8 +1,14 @@
+//! Boolean-mask filtering for `DataFrame`.
+
 use std::sync::Arc;
 use arrow::array::Array;
 use crate::{CrossbowError, DataFrame, Series};
 
 impl DataFrame {
+    /// Filters rows using a boolean mask `Series`.
+    ///
+    /// Keeps rows where the mask is `true`. The mask must match the
+    /// DataFrame's row count.
     pub fn filter_by_mask(&self, mask: &Series) -> Result<DataFrame, CrossbowError> {
         if mask.len() != self.shape().0 {
             return Err(CrossbowError::MismatchedColumnLengths);

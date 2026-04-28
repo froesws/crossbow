@@ -1,8 +1,14 @@
+//! Column-based sorting for `DataFrame`.
+
 use std::sync::Arc;
 use arrow::array::Array;
 use crate::{CrossbowError, DataFrame, Series};
 
 impl DataFrame {
+    /// Sorts the `DataFrame` by a column.
+    ///
+    /// Set `ascending: true` for smallest-first, `false` for largest-first.
+    /// Null values sort first.
     pub fn sort_by(&self, column_name: &str, ascending: bool) -> Result<DataFrame, CrossbowError> {
         let sort_col = self.select(column_name)?;
 

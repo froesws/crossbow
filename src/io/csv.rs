@@ -25,6 +25,12 @@ fn df_to_record_batch(df: &DataFrame) -> Result<RecordBatch, CrossbowError> {
         .map_err(|e| CrossbowError::SchemaMismatch(e.to_string()))
 }
 
+/// Reads a CSV file with automatic type inference.
+///
+/// The first row is treated as a header containing column names.
+/// Arrow types are inferred from the data. All columns are loaded into memory.
+///
+/// Supports `Int32`, `Int64`, `Float32`, `Float64`, `Utf8`, and `Boolean` columns.
 pub fn read_csv(path: &str) -> Result<DataFrame, CrossbowError> {
     let file = File::open(path).map_err(|e| CrossbowError::IoError(e.to_string()))?;
 
@@ -55,6 +61,9 @@ pub fn read_csv(path: &str) -> Result<DataFrame, CrossbowError> {
     DataFrame::new(columns)
 }
 
+/// Writes a `DataFrame` to a CSV file with a header row.
+///
+/// Uses the Arrow CSV writer for efficient vectorized output.
 pub fn write_csv(df: &DataFrame, path: &str) -> Result<(), CrossbowError> {
     let batch = df_to_record_batch(df)?;
     let file = File::create(path).map_err(|e| CrossbowError::IoError(e.to_string()))?;

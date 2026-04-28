@@ -54,6 +54,12 @@ pub mod aggregation;
 #[cfg(test)]
 mod unit_test;
 
+/// A named, strongly-typed column of data backed by an Apache Arrow array.
+///
+/// `Series` is the foundational data structure in crossbow. It wraps an
+/// [`ArrayRef`] from the `arrow-rs` crate, providing type-safe access
+/// and a rich set of transformation, comparison, arithmetic, null-handling,
+/// and aggregation operations.
 #[derive(Debug, Clone)]
 pub struct Series {
     name: String,
@@ -61,6 +67,9 @@ pub struct Series {
 }
 
 impl Series {
+    /// Creates a new `Series` from an Arrow array reference.
+    ///
+    /// Prefer [`Series::from`] for constructing from Rust `Vec<T>` values.
     pub fn new(name: impl Into<String>, data: ArrayRef) -> Self {
         Series {
             name: name.into(),
@@ -68,6 +77,10 @@ impl Series {
         }
     }
 
+    /// Creates a `Series` from a `Vec<T>` and a column name.
+    ///
+    /// Convenience constructor using the [`IntoSeries`] trait. Supports all
+    /// integer, float, bool, `&str`, and `String` vectors (including `Option` variants).
     pub fn from<T>(name: &str, data: Vec<T>) -> Series
     where
         T: 'static,
@@ -76,27 +89,35 @@ impl Series {
         data.into_series(name)
     }
 
+    /// Returns the column name of this `Series`.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Returns a reference to the underlying Arrow array.
     #[allow(dead_code)]
     pub fn data(&self) -> &ArrayRef {
         &self.data
     }
 
+    /// Returns the Arrow data type of this column.
     pub fn dtype(&self) -> &DataType {
         self.data.data_type()
     }
 
+    /// Returns the number of elements (including nulls).
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
+    /// Returns `true` if the `Series` contains zero elements.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// Attempts to downcast the internal array to a concrete Arrow array type.
+    ///
+    /// Returns `Some(&T)` on success, `None` if the type does not match.
     pub fn as_primitive<T>(&self) -> Option<&T>
     where
         T: 'static,
@@ -139,7 +160,13 @@ impl Series {
     }
 }
 
+/// Trait for converting a `Vec<T>` into a named `Series`.
+///
+/// Implemented for all common Rust types (`i8`-`i64`, `u8`-`u64`, `f32`, `f64`,
+/// `bool`, `&str`, `String`) and their `Option` variants. Uses the
+/// [`impl_into_series_for_numerics!`] macro for numeric types.
 pub trait IntoSeries {
+    /// Consumes the vector, returning a `Series` with the given name.
     fn into_series(self, name: &str) -> Series;
 }
 

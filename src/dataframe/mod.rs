@@ -1,3 +1,11 @@
+//! DataFrame — the primary tabular data structure.
+//!
+//! A `DataFrame` is an ordered collection of named [`Series`] (columns),
+//! all of equal length. It supports column management, row access,
+//! filtering, sorting, grouping, and aggregation. Use [`DataFrame::new`] to
+//! construct one, or [`crate::read_csv`] / [`crate::read_parquet`] to load
+//! from files.
+
 use std::fmt;
 use crate::{CrossbowError, Series};
 
@@ -8,12 +16,19 @@ pub mod groupby;
 #[cfg(test)]
 mod unit_test;
 
+/// A tabular collection of named, equal-length columns ([`Series`]).
+///
+/// Use [`DataFrame::new`] to construct one from `Vec<Series>`.
+/// Supports column management, row access, filtering, sorting, and grouping.
 #[derive(Debug, Clone)]
 pub struct DataFrame {
     columns: Vec<Series>,
 }
 
 impl DataFrame {
+    /// Creates a new `DataFrame` from a vector of `Series`.
+    ///
+    /// All `Series` must have the same length. Column names must be unique.
     pub fn new(columns: Vec<Series>) -> Result<Self, CrossbowError> {
         if columns.is_empty() {
             return Ok(DataFrame { columns });
@@ -33,6 +48,7 @@ impl DataFrame {
         Ok(DataFrame { columns })
     }
 
+    /// Returns the shape as `(rows, columns)`.
     pub fn shape(&self) -> (usize, usize) {
         if self.columns.is_empty() {
             (0, 0)
@@ -41,10 +57,12 @@ impl DataFrame {
         }
     }
 
+    /// Returns a vector of all column names in order.
     pub fn get_column_names(&self) -> Vec<&str> {
         self.columns.iter().map(|s| s.name()).collect()
     }
 
+    /// Selects a column by name. Returns [`CrossbowError::ColumnNotFound`] if missing.
     pub fn select(&self, name: &str) -> Result<&Series, CrossbowError> {
         self.columns
             .iter()
@@ -52,10 +70,12 @@ impl DataFrame {
             .ok_or_else(|| CrossbowError::ColumnNotFound(name.to_string()))
     }
 
+    /// Returns a reference to all columns in order.
     pub fn columns(&self) -> &[Series] {
         &self.columns
     }
 
+    /// Returns a single row as `Vec<String>`. Index out of range returns an error.
     pub fn get_row(&self, index: usize) -> Result<Vec<String>, CrossbowError> {
         if index >= self.shape().0 {
             return Err(CrossbowError::IndexOutOfBounds(index));
@@ -68,6 +88,7 @@ impl DataFrame {
         Ok(row)
     }
 
+    /// Returns multiple rows by index. Fails if any index is out of range.
     pub fn get_rows(&self, indices: &[usize]) -> Result<Vec<Vec<String>>, CrossbowError> {
         let (n_rows, _) = self.shape();
         for &idx in indices {
@@ -87,6 +108,7 @@ impl DataFrame {
         Ok(rows)
     }
 
+    /// Adds a new column. Must have the same row count and a unique name.
     pub fn add_column(&self, series: Series) -> Result<DataFrame, CrossbowError> {
         if series.len() != self.shape().0 {
             return Err(CrossbowError::MismatchedColumnLengths);
@@ -101,6 +123,7 @@ impl DataFrame {
         DataFrame::new(new_columns)
     }
 
+    /// Removes a column by name. Returns error if the column does not exist.
     pub fn remove_column(&self, name: &str) -> Result<DataFrame, CrossbowError> {
         let new_columns: Vec<Series> = self.columns
             .iter()
@@ -115,6 +138,7 @@ impl DataFrame {
         DataFrame::new(new_columns)
     }
 
+    /// Renames a column. Fails if `old_name` is missing or `new_name` is taken.
     pub fn rename_column(&self, old_name: &str, new_name: &str) -> Result<DataFrame, CrossbowError> {
         if !self.get_column_names().contains(&old_name) {
             return Err(CrossbowError::ColumnNotFound(old_name.to_string()));

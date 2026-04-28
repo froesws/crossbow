@@ -1,9 +1,15 @@
+//! Aggregation and statistical operations on `Series`.
+//!
+//! All functions ignore null values. Standard deviation and variance use
+//! the **sample** formula (n-1 denominator).
+
 use arrow::datatypes::DataType;
 use arrow::array::Array;
 use crate::error::CrossbowError;
 use crate::series::Series;
 
 impl Series {
+    /// Sum of all non-null values. Returns `0.0` if all values are null.
     pub fn sum(&self) -> Result<f64, CrossbowError> {
         match self.dtype() {
             DataType::Int32 => {
@@ -36,6 +42,7 @@ impl Series {
         }
     }
 
+    /// Arithmetic mean of all non-null values. Returns `0.0` if all null.
     pub fn mean(&self) -> Result<f64, CrossbowError> {
         match self.dtype() {
             DataType::Int32 | DataType::Float64 => {
@@ -53,6 +60,7 @@ impl Series {
         }
     }
 
+    /// Minimum non-null value. Returns `None` if all values are null or the `Series` is empty.
     pub fn min(&self) -> Result<Option<f64>, CrossbowError> {
         match self.dtype() {
             DataType::Int32 => {
@@ -93,6 +101,7 @@ impl Series {
         }
     }
 
+    /// Maximum non-null value. Returns `None` if all values are null or the `Series` is empty.
     pub fn max(&self) -> Result<Option<f64>, CrossbowError> {
         match self.dtype() {
             DataType::Int32 => {
@@ -133,10 +142,12 @@ impl Series {
         }
     }
 
+    /// Total number of elements (including nulls). Same as [`Series::len`].
     pub fn count(&self) -> usize {
         self.len()
     }
 
+    /// Count of non-null elements.
     pub fn count_non_null(&self) -> Result<usize, CrossbowError> {
         let mut count = 0;
         for i in 0..self.len() {
@@ -147,6 +158,7 @@ impl Series {
         Ok(count)
     }
 
+    /// Sample standard deviation (n-1 divisor). Returns `0.0` if fewer than 2 non-null values.
     pub fn std(&self) -> Result<f64, CrossbowError> {
         if self.count_non_null()? < 2 {
             return Ok(0.0);
@@ -195,6 +207,7 @@ impl Series {
         Ok((variance / (count - 1) as f64).sqrt())
     }
 
+    /// Sample variance (n-1 divisor). Returns `0.0` if fewer than 2 non-null values.
     pub fn var(&self) -> Result<f64, CrossbowError> {
         if self.count_non_null()? < 2 {
             return Ok(0.0);

@@ -5,6 +5,9 @@ use arrow::compute::concat_batches;
 use arrow::datatypes::{Field, Schema};
 use crate::{CrossbowError, DataFrame, Series};
 
+/// Reads a Parquet file into a `DataFrame`.
+///
+/// All row groups are loaded and concatenated in memory.
 pub fn read_parquet(path: &str) -> Result<DataFrame, CrossbowError> {
     let file = File::open(path).map_err(|e| CrossbowError::IoError(e.to_string()))?;
 
@@ -31,6 +34,7 @@ pub fn read_parquet(path: &str) -> Result<DataFrame, CrossbowError> {
     DataFrame::new(columns)
 }
 
+/// Writes a `DataFrame` to a Parquet file using Snappy compression.
 pub fn write_parquet(df: &DataFrame, path: &str) -> Result<(), CrossbowError> {
     let schema = Arc::new(Schema::new(
         df.columns().iter().map(|s| {

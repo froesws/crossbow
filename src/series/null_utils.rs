@@ -1,3 +1,5 @@
+//! Null handling, value access, and type-checking utilities for `Series`.
+
 use std::sync::Arc;
 use arrow::datatypes::DataType;
 use arrow::array::Array;
@@ -5,6 +7,7 @@ use crate::error::CrossbowError;
 use crate::series::Series;
 
 impl Series {
+    /// Returns a boolean `Series` indicating which elements are null.
     pub fn is_null(&self) -> Result<Series, CrossbowError> {
         let mut builder = arrow::array::BooleanBuilder::new();
         for i in 0..self.len() {
@@ -13,6 +16,7 @@ impl Series {
         Ok(Series::new(format!("{}_is_null", self.name()), Arc::new(builder.finish())))
     }
 
+    /// Returns a boolean `Series` indicating which elements are **not** null.
     pub fn is_not_null(&self) -> Result<Series, CrossbowError> {
         let mut builder = arrow::array::BooleanBuilder::new();
         for i in 0..self.len() {
@@ -21,6 +25,9 @@ impl Series {
         Ok(Series::new(format!("{}_is_not_null", self.name()), Arc::new(builder.finish())))
     }
 
+    /// Fills null values with the corresponding value from another `Series`.
+    ///
+    /// Both `Series` must have the same length and data type. Supports `Int32` and `Float64`.
     pub fn fill_null(&self, fill_value: &Series) -> Result<Series, CrossbowError> {
         if self.len() != fill_value.len() {
             return Err(CrossbowError::MismatchedColumnLengths);
@@ -77,6 +84,9 @@ impl Series {
         }
     }
 
+    /// Removes all null values, returning a shorter `Series`.
+    ///
+    /// Supports `Int32`, `Float64`, and `Utf8`.
     pub fn drop_null(&self) -> Result<Series, CrossbowError> {
         match self.dtype() {
             DataType::Int32 => {
@@ -120,6 +130,10 @@ impl Series {
         }
     }
 
+    /// Returns the value at `index` as a `String`.
+    ///
+    /// UTF-8 values are returned with surrounding quotes.
+    /// Returns [`CrossbowError::IndexOutOfBounds`] if `index` is out of range.
     pub fn value_at(&self, index: usize) -> Result<String, CrossbowError> {
         if index >= self.len() {
             return Err(CrossbowError::IndexOutOfBounds(index));
@@ -127,6 +141,9 @@ impl Series {
         Ok(self.get_value_as_string(index))
     }
 
+    /// Returns a zero-copy slice of the `Series` from `offset` with the given `length`.
+    ///
+    /// Returns [`CrossbowError::IndexOutOfBounds`] if the slice exceeds the `Series` length.
     pub fn slice(&self, offset: usize, length: usize) -> Result<Series, CrossbowError> {
         if offset + length > self.len() {
             return Err(CrossbowError::IndexOutOfBounds(offset + length));
@@ -135,6 +152,7 @@ impl Series {
         Ok(Series::new(format!("{}_slice", self.name()), sliced))
     }
 
+    /// Returns `true` if the `Series` holds numeric data (integer or float).
     pub fn is_numeric(&self) -> bool {
         matches!(self.dtype(), 
             DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64 |
@@ -143,10 +161,12 @@ impl Series {
         )
     }
 
+    /// Returns `true` if the `Series` holds string data.
     pub fn is_string(&self) -> bool {
         matches!(self.dtype(), DataType::Utf8 | DataType::LargeUtf8)
     }
 
+    /// Returns `true` if the `Series` holds boolean data.
     pub fn is_boolean(&self) -> bool {
         matches!(self.dtype(), DataType::Boolean)
     }

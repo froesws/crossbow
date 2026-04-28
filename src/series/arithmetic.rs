@@ -1,3 +1,10 @@
+//! Element-wise arithmetic on `Series`.
+//!
+//! All operations require both operands to have the same length and data type.
+//! Null values propagate: `null + x = null`, `null / x = null`, etc.
+//! Integer overflow returns [`CrossbowError::ArithmeticOverflow`].
+//! Division or modulo by zero returns [`CrossbowError::DivisionByZero`].
+
 use std::sync::Arc;
 use arrow::datatypes::DataType;
 use arrow::array::Array;
@@ -5,6 +12,10 @@ use crate::error::CrossbowError;
 use crate::series::Series;
 
 impl Series {
+    /// Element-wise addition: `self[i] + other[i]`.
+    ///
+    /// Both `Series` must have the same length and compatible types.
+    /// Supports `Int32` and `Float64`.
     pub fn add(&self, other: &Series) -> Result<Series, CrossbowError> {
         if self.len() != other.len() {
             return Err(CrossbowError::MismatchedColumnLengths);
@@ -56,6 +67,7 @@ impl Series {
         }
     }
 
+    /// Element-wise subtraction: `self[i] - other[i]`.
     pub fn subtract(&self, other: &Series) -> Result<Series, CrossbowError> {
         if self.len() != other.len() {
             return Err(CrossbowError::MismatchedColumnLengths);
@@ -107,6 +119,7 @@ impl Series {
         }
     }
 
+    /// Element-wise multiplication: `self[i] * other[i]`.
     pub fn multiply(&self, other: &Series) -> Result<Series, CrossbowError> {
         if self.len() != other.len() {
             return Err(CrossbowError::MismatchedColumnLengths);
@@ -158,6 +171,9 @@ impl Series {
         }
     }
 
+    /// Element-wise division: `self[i] / other[i]`.
+    ///
+    /// Returns [`CrossbowError::DivisionByZero`] if any element of `other` is zero.
     pub fn divide(&self, other: &Series) -> Result<Series, CrossbowError> {
         if self.len() != other.len() {
             return Err(CrossbowError::MismatchedColumnLengths);
@@ -218,6 +234,7 @@ impl Series {
         }
     }
 
+    /// Element-wise modulo: `self[i] % other[i]`. Only supports `Int32`.
     pub fn modulo(&self, other: &Series) -> Result<Series, CrossbowError> {
         if self.len() != other.len() {
             return Err(CrossbowError::MismatchedColumnLengths);

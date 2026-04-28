@@ -1,8 +1,14 @@
+//! Group-by operations for `DataFrame`.
+
 use std::collections::HashMap;
 use arrow::array::Array;
 use crate::{CrossbowError, DataFrame, Series};
 
 impl DataFrame {
+    /// Groups rows by the values in a column.
+    ///
+    /// Returns a [`GroupedDataFrame`] that supports `count`, `sum`, and `mean`
+    /// aggregation per group.
     pub fn group_by(&self, column_name: &str) -> Result<GroupedDataFrame, CrossbowError> {
         let group_col = self.select(column_name)?;
         let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
@@ -20,6 +26,9 @@ impl DataFrame {
     }
 }
 
+/// A grouped `DataFrame` produced by [`DataFrame::group_by`].
+///
+/// Supports `count()`, `sum()`, and `mean()` aggregation per group.
 #[derive(Debug, Clone)]
 pub struct GroupedDataFrame {
     dataframe: DataFrame,
@@ -28,6 +37,7 @@ pub struct GroupedDataFrame {
 }
 
 impl GroupedDataFrame {
+    /// Counts rows in each group. Returns a `DataFrame` with the grouping key and a `count` column.
     pub fn count(&self) -> Result<DataFrame, CrossbowError> {
         let mut keys = Vec::new();
         let mut counts = Vec::new();
@@ -43,6 +53,7 @@ impl GroupedDataFrame {
         DataFrame::new(vec![key_series, count_series])
     }
 
+    /// Computes the sum of a numeric column for each group.
     pub fn sum(&self, column_name: &str) -> Result<DataFrame, CrossbowError> {
         let agg_col = self.dataframe.select(column_name)?;
 
@@ -87,6 +98,7 @@ impl GroupedDataFrame {
         DataFrame::new(vec![key_series, sum_series])
     }
 
+    /// Computes the arithmetic mean of a numeric column for each group.
     pub fn mean(&self, column_name: &str) -> Result<DataFrame, CrossbowError> {
         let agg_col = self.dataframe.select(column_name)?;
 
