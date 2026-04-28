@@ -111,35 +111,27 @@ impl Series {
 
         match self.dtype() {
             DataType::Int32 => {
-                let array = self
-                    .data
-                    .as_any()
-                    .downcast_ref::<arrow::array::Int32Array>()
-                    .unwrap();
+                let array = self.data.as_any().downcast_ref::<arrow::array::Int32Array>().unwrap();
+                array.value(index).to_string()
+            }
+            DataType::Int64 => {
+                let array = self.data.as_any().downcast_ref::<arrow::array::Int64Array>().unwrap();
+                array.value(index).to_string()
+            }
+            DataType::Float32 => {
+                let array = self.data.as_any().downcast_ref::<arrow::array::Float32Array>().unwrap();
                 array.value(index).to_string()
             }
             DataType::Float64 => {
-                let array = self
-                    .data
-                    .as_any()
-                    .downcast_ref::<arrow::array::Float64Array>()
-                    .unwrap();
+                let array = self.data.as_any().downcast_ref::<arrow::array::Float64Array>().unwrap();
                 array.value(index).to_string()
             }
             DataType::Utf8 => {
-                let array = self
-                    .data
-                    .as_any()
-                    .downcast_ref::<arrow::array::StringArray>()
-                    .unwrap();
+                let array = self.data.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
                 format!("\"{}\"", array.value(index))
             }
             DataType::Boolean => {
-                let array = self
-                    .data
-                    .as_any()
-                    .downcast_ref::<arrow::array::BooleanArray>()
-                    .unwrap();
+                let array = self.data.as_any().downcast_ref::<arrow::array::BooleanArray>().unwrap();
                 array.value(index).to_string()
             }
             other_type => format!("Unsupported type: {:?}", other_type),

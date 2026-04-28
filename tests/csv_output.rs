@@ -1,11 +1,8 @@
-use std::fs::{self, File};
+use std::fs;
 use std::sync::Arc;
 use std::path::Path;
-use arrow::csv::ReaderBuilder;
-use arrow::datatypes::*;
 use arrow::array::*;
-use arrow::compute::concat_batches;
-use crossbow::{DataFrame, Series};
+use crossbow::{DataFrame, Series, read_csv, write_csv};
 
 static OUTPUT_DIR: &str = "tests/output";
 
@@ -14,33 +11,18 @@ fn ensure_output_dir() {
 }
 
 fn load_test_data() -> DataFrame {
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("employee", DataType::Utf8, true),
-        Field::new("salary", DataType::Float64, true),
-        Field::new("age", DataType::Int32, true),
-        Field::new("position", DataType::Utf8, true),
-        Field::new("yield", DataType::Int32, true),
-    ]));
-
-    let file = File::open("data_1M.csv").unwrap();
-    let reader = ReaderBuilder::new(schema.clone())
-        .with_header(true)
-        .with_batch_size(65536)
-        .build(file)
-        .unwrap();
-
-    let batches: Vec<RecordBatch> = reader.collect::<Result<_, _>>().unwrap();
-    let batch = concat_batches(&schema, batches.iter()).unwrap();
-
-    let columns: Vec<Series> = schema.fields().iter().enumerate().map(|(i, field)| {
-        Series::new(field.name(), batch.column(i).clone())
-    }).collect();
-
-    DataFrame::new(columns).unwrap()
+    read_csv("data_1M.csv").unwrap()
 }
 
-fn make_int_mask(series: &Series, pred: fn(i32) -> bool) -> Series {
-    let arr = series.as_primitive::<Int32Array>().unwrap();
+fn make_int_mask(series: &Series, pred: fn(i64) -> bool) -> Series {
+    if let Some(arr) = series.as_primitive::<Int32Array>() {
+        let mut b = BooleanArray::builder(arr.len());
+        for i in 0..arr.len() {
+            b.append_value(arr.is_valid(i) && pred(arr.value(i) as i64));
+        }
+        return Series::new("mask", Arc::new(b.finish()));
+    }
+    let arr = series.as_primitive::<Int64Array>().unwrap();
     let mut b = BooleanArray::builder(arr.len());
     for i in 0..arr.len() {
         b.append_value(arr.is_valid(i) && pred(arr.value(i)));
@@ -66,22 +48,6 @@ fn make_string_mask(series: &Series, target: &str) -> Series {
     Series::new("mask", Arc::new(b.finish()))
 }
 
-fn write_df_to_csv(df: &DataFrame, path: &str) {
-    let mut wtr = csv::Writer::from_path(path).unwrap();
-    wtr.write_record(df.get_column_names()).unwrap();
-    for i in 0..df.shape().0 {
-        let row: Vec<String> = df.get_row(i).unwrap().into_iter().map(|v| {
-            if v.starts_with('"') && v.ends_with('"') && v.len() >= 2 {
-                v[1..v.len() - 1].to_string()
-            } else {
-                v
-            }
-        }).collect();
-        wtr.write_record(&row).unwrap();
-    }
-    wtr.flush().unwrap();
-}
-
 fn count_csv_rows(path: &str) -> usize {
     let mut rdr = csv::Reader::from_path(path).unwrap();
     rdr.records().count()
@@ -92,8 +58,6 @@ fn read_csv_column(path: &str, col: usize) -> Vec<String> {
     rdr.records().map(|r| r.unwrap().get(col).unwrap().to_string()).collect()
 }
 
-// ---- Filter and save tests ----
-
 #[test]
 fn test_save_senior_employees() {
     ensure_output_dir();
@@ -101,7 +65,7 @@ fn test_save_senior_employees() {
     let mask = make_int_mask(df.select("age").unwrap(), |v| v >= 50);
     let seniors = df.filter_by_mask(&mask).unwrap();
     let out = format!("{}/senior_employees.csv", OUTPUT_DIR);
-    write_df_to_csv(&seniors, &out);
+    write_csv(&seniors, &out).unwrap();
 
     assert!(Path::new(&out).exists());
     let rows = count_csv_rows(&out);
@@ -109,7 +73,7 @@ fn test_save_senior_employees() {
 
     let ages: Vec<i32> = read_csv_column(&out, 2).into_iter().map(|s| s.parse().unwrap()).collect();
     for age in &ages {
-        assert!(*age >= 50, "Expected age >= 50, got {}", age);
+        assert!(*age >= 50);
     }
 }
 
@@ -120,15 +84,14 @@ fn test_save_high_performers() {
     let mask = make_int_mask(df.select("yield").unwrap(), |v| v > 9000);
     let performers = df.filter_by_mask(&mask).unwrap();
     let out = format!("{}/high_performers.csv", OUTPUT_DIR);
-    write_df_to_csv(&performers, &out);
+    write_csv(&performers, &out).unwrap();
 
     assert!(Path::new(&out).exists());
-    let rows = count_csv_rows(&out);
-    assert!(rows > 0);
+    assert!(count_csv_rows(&out) > 0);
 
     let yields: Vec<i32> = read_csv_column(&out, 4).into_iter().map(|s| s.parse().unwrap()).collect();
     for y in &yields {
-        assert!(*y > 9000, "Expected yield > 9000, got {}", y);
+        assert!(*y > 9000);
     }
 }
 
@@ -139,15 +102,13 @@ fn test_save_managers() {
     let mask = make_string_mask(df.select("position").unwrap(), "Manager");
     let managers = df.filter_by_mask(&mask).unwrap();
     let out = format!("{}/managers.csv", OUTPUT_DIR);
-    write_df_to_csv(&managers, &out);
+    write_csv(&managers, &out).unwrap();
 
     assert!(Path::new(&out).exists());
-    let rows = count_csv_rows(&out);
-    assert!(rows > 0);
+    assert!(count_csv_rows(&out) > 0);
 
-    let positions = read_csv_column(&out, 3);
-    for pos in &positions {
-        assert_eq!(pos, "Manager", "Expected position 'Manager', got '{}'", pos);
+    for pos in &read_csv_column(&out, 3) {
+        assert_eq!(pos, "Manager");
     }
 }
 
@@ -158,7 +119,7 @@ fn test_save_young_analysts() {
     let analysts = df.filter_by_mask(&make_string_mask(df.select("position").unwrap(), "Analyst")).unwrap();
     let young = analysts.filter_by_mask(&make_int_mask(analysts.select("age").unwrap(), |v| v < 30)).unwrap();
     let out = format!("{}/young_analysts.csv", OUTPUT_DIR);
-    write_df_to_csv(&young, &out);
+    write_csv(&young, &out).unwrap();
 
     assert!(Path::new(&out).exists());
     assert!(count_csv_rows(&out) > 0);
@@ -166,7 +127,7 @@ fn test_save_young_analysts() {
     let ages: Vec<i32> = read_csv_column(&out, 2).into_iter().map(|s| s.parse().unwrap()).collect();
     let positions = read_csv_column(&out, 3);
     for (i, age) in ages.iter().enumerate() {
-        assert!(*age < 30, "Expected age < 30, got {}", age);
+        assert!(*age < 30);
         assert_eq!(positions[i], "Analyst");
     }
 }
@@ -178,7 +139,7 @@ fn test_save_high_salary_directors() {
     let directors = df.filter_by_mask(&make_string_mask(df.select("position").unwrap(), "Director")).unwrap();
     let rich = directors.filter_by_mask(&make_float_mask(directors.select("salary").unwrap(), |v| v > 20000.0)).unwrap();
     let out = format!("{}/high_salary_directors.csv", OUTPUT_DIR);
-    write_df_to_csv(&rich, &out);
+    write_csv(&rich, &out).unwrap();
 
     assert!(Path::new(&out).exists());
     assert!(count_csv_rows(&out) > 0);
@@ -186,7 +147,7 @@ fn test_save_high_salary_directors() {
     let salaries: Vec<f64> = read_csv_column(&out, 1).into_iter().map(|s| s.parse().unwrap()).collect();
     let positions = read_csv_column(&out, 3);
     for (i, sal) in salaries.iter().enumerate() {
-        assert!(*sal > 20000.0, "Expected salary > 20000, got {}", sal);
+        assert!(*sal > 20000.0);
         assert_eq!(positions[i], "Director");
     }
 }
@@ -197,14 +158,14 @@ fn test_save_sorted_by_salary_desc() {
     let df = load_test_data();
     let sorted = df.sort_by("salary", false).unwrap();
     let out = format!("{}/sorted_by_salary_desc.csv", OUTPUT_DIR);
-    write_df_to_csv(&sorted, &out);
+    write_csv(&sorted, &out).unwrap();
 
     assert!(Path::new(&out).exists());
     assert_eq!(count_csv_rows(&out), 1_000_000);
 
     let salaries: Vec<f64> = read_csv_column(&out, 1).into_iter().map(|s| s.parse().unwrap()).collect();
     for i in 1..salaries.len() {
-        assert!(salaries[i - 1] >= salaries[i], "Sort failed at index {}: {} < {}", i, salaries[i - 1], salaries[i]);
+        assert!(salaries[i - 1] >= salaries[i]);
     }
 }
 
@@ -214,14 +175,14 @@ fn test_save_sorted_by_age_asc() {
     let df = load_test_data();
     let sorted = df.sort_by("age", true).unwrap();
     let out = format!("{}/sorted_by_age_asc.csv", OUTPUT_DIR);
-    write_df_to_csv(&sorted, &out);
+    write_csv(&sorted, &out).unwrap();
 
     assert!(Path::new(&out).exists());
     assert_eq!(count_csv_rows(&out), 1_000_000);
 
     let ages: Vec<i32> = read_csv_column(&out, 2).into_iter().map(|s| s.parse().unwrap()).collect();
     for i in 1..ages.len() {
-        assert!(ages[i - 1] <= ages[i], "Sort failed at index {}: {} > {}", i, ages[i - 1], ages[i]);
+        assert!(ages[i - 1] <= ages[i]);
     }
 }
 
@@ -232,11 +193,10 @@ fn test_save_grouped_position_counts() {
     let grouped = df.group_by("position").unwrap();
     let counts = grouped.count().unwrap();
     let out = format!("{}/position_counts.csv", OUTPUT_DIR);
-    write_df_to_csv(&counts, &out);
+    write_csv(&counts, &out).unwrap();
 
     assert!(Path::new(&out).exists());
-    let rows = count_csv_rows(&out);
-    assert_eq!(rows, 5);
+    assert_eq!(count_csv_rows(&out), 5);
 }
 
 #[test]
@@ -246,14 +206,13 @@ fn test_save_grouped_salary_means() {
     let grouped = df.group_by("position").unwrap();
     let means = grouped.mean("salary").unwrap();
     let out = format!("{}/salary_means_by_position.csv", OUTPUT_DIR);
-    write_df_to_csv(&means, &out);
+    write_csv(&means, &out).unwrap();
 
     assert!(Path::new(&out).exists());
     assert_eq!(count_csv_rows(&out), 5);
 
-    let salaries: Vec<f64> = read_csv_column(&out, 1).into_iter().map(|s| s.parse().unwrap()).collect();
-    for s in &salaries {
-        assert!(*s > 0.0, "Expected positive mean salary");
+    for s in &read_csv_column(&out, 1).into_iter().map(|s| s.parse::<f64>().unwrap()).collect::<Vec<_>>() {
+        assert!(*s > 0.0);
     }
 }
 
@@ -265,7 +224,7 @@ fn test_save_filtered_then_sorted() {
     let over_40 = df.filter_by_mask(&mask).unwrap();
     let sorted = over_40.sort_by("salary", true).unwrap();
     let out = format!("{}/over_40_sorted_by_salary.csv", OUTPUT_DIR);
-    write_df_to_csv(&sorted, &out);
+    write_csv(&sorted, &out).unwrap();
 
     assert!(Path::new(&out).exists());
     assert!(count_csv_rows(&out) > 0);
@@ -274,7 +233,7 @@ fn test_save_filtered_then_sorted() {
     let salaries: Vec<f64> = read_csv_column(&out, 1).into_iter().map(|s| s.parse().unwrap()).collect();
     for age in &ages { assert!(*age > 40); }
     for i in 1..salaries.len() {
-        assert!(salaries[i - 1] <= salaries[i], "Sort failed at {}", i);
+        assert!(salaries[i - 1] <= salaries[i]);
     }
 }
 
@@ -286,13 +245,12 @@ fn test_save_complex_combined_filter() {
     let high_yield = engineers.filter_by_mask(&make_int_mask(engineers.select("yield").unwrap(), |v| v > 5000)).unwrap();
     let sorted = high_yield.sort_by("salary", false).unwrap();
     let out = format!("{}/engineers_high_yield_top.csv", OUTPUT_DIR);
-    write_df_to_csv(&sorted, &out);
+    write_csv(&sorted, &out).unwrap();
 
     assert!(Path::new(&out).exists());
     assert!(count_csv_rows(&out) > 0);
 
-    let positions = read_csv_column(&out, 3);
-    for pos in &positions { assert_eq!(pos, "Engineer"); }
+    for pos in &read_csv_column(&out, 3) { assert_eq!(pos, "Engineer"); }
 }
 
 #[test]
@@ -302,10 +260,31 @@ fn test_save_empty_filter_result() {
     let all_false = Series::new("none", Arc::new(BooleanArray::from(vec![false; df.shape().0])));
     let empty = df.filter_by_mask(&all_false).unwrap();
     let out = format!("{}/empty_filter_result.csv", OUTPUT_DIR);
-    write_df_to_csv(&empty, &out);
+    write_csv(&empty, &out).unwrap();
 
     assert!(Path::new(&out).exists());
     assert_eq!(count_csv_rows(&out), 0);
 }
 
+#[test]
+fn test_csv_roundtrip() {
+    ensure_output_dir();
+    let df = load_test_data();
+    let out = format!("{}/roundtrip.csv", OUTPUT_DIR);
+    write_csv(&df, &out).unwrap();
+    let reloaded = read_csv(&out).unwrap();
+    assert_eq!(df.shape(), reloaded.shape());
+    assert_eq!(df.get_column_names(), reloaded.get_column_names());
+    assert!(count_csv_rows(&out) > 0);
+}
 
+#[test]
+fn test_parquet_roundtrip() {
+    ensure_output_dir();
+    let df = load_test_data();
+    let out = format!("{}/roundtrip.parquet", OUTPUT_DIR);
+    crossbow::io::parquet::write_parquet(&df, &out).unwrap();
+    let reloaded = crossbow::io::parquet::read_parquet(&out).unwrap();
+    assert_eq!(df.shape(), reloaded.shape());
+    assert_eq!(df.get_column_names(), reloaded.get_column_names());
+}

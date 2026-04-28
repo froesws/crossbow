@@ -132,7 +132,7 @@ impl Series {
             return Err(CrossbowError::IndexOutOfBounds(offset + length));
         }
         let sliced = self.data.slice(offset, length);
-        Ok(Series::new(format!("{}_slice", self.name()), Arc::new(sliced)))
+        Ok(Series::new(format!("{}_slice", self.name()), sliced))
     }
 
     pub fn is_numeric(&self) -> bool {

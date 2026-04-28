@@ -12,7 +12,6 @@ impl DataFrame {
             arrow::datatypes::DataType::Int32 => {
                 let arr = sort_col.as_primitive::<arrow::array::Int32Array>()
                     .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int32Array".to_string()))?;
-
                 if ascending {
                     indices.sort_by(|&a, &b| {
                         let val_a = if arr.is_valid(a) { Some(arr.value(a)) } else { None };
@@ -24,6 +23,40 @@ impl DataFrame {
                         let val_a = if arr.is_valid(a) { Some(arr.value(a)) } else { None };
                         let val_b = if arr.is_valid(b) { Some(arr.value(b)) } else { None };
                         val_b.cmp(&val_a)
+                    });
+                }
+            }
+            arrow::datatypes::DataType::Int64 => {
+                let arr = sort_col.as_primitive::<arrow::array::Int64Array>()
+                    .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int64Array".to_string()))?;
+                if ascending {
+                    indices.sort_by(|&a, &b| {
+                        let val_a = if arr.is_valid(a) { Some(arr.value(a)) } else { None };
+                        let val_b = if arr.is_valid(b) { Some(arr.value(b)) } else { None };
+                        val_a.cmp(&val_b)
+                    });
+                } else {
+                    indices.sort_by(|&a, &b| {
+                        let val_a = if arr.is_valid(a) { Some(arr.value(a)) } else { None };
+                        let val_b = if arr.is_valid(b) { Some(arr.value(b)) } else { None };
+                        val_b.cmp(&val_a)
+                    });
+                }
+            }
+            arrow::datatypes::DataType::Float32 => {
+                let arr = sort_col.as_primitive::<arrow::array::Float32Array>()
+                    .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float32Array".to_string()))?;
+                if ascending {
+                    indices.sort_by(|&a, &b| {
+                        let val_a = if arr.is_valid(a) { Some(arr.value(a)) } else { None };
+                        let val_b = if arr.is_valid(b) { Some(arr.value(b)) } else { None };
+                        val_a.partial_cmp(&val_b).unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                } else {
+                    indices.sort_by(|&a, &b| {
+                        let val_a = if arr.is_valid(a) { Some(arr.value(a)) } else { None };
+                        let val_b = if arr.is_valid(b) { Some(arr.value(b)) } else { None };
+                        val_b.partial_cmp(&val_a).unwrap_or(std::cmp::Ordering::Equal)
                     });
                 }
             }
@@ -77,6 +110,32 @@ impl DataFrame {
                     let arr = series.as_primitive::<arrow::array::Int32Array>()
                         .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int32Array".to_string()))?;
                     let mut b = arrow::array::Int32Builder::new();
+                    for &idx in &indices {
+                        if arr.is_valid(idx) {
+                            b.append_value(arr.value(idx));
+                        } else {
+                            b.append_null();
+                        }
+                    }
+                    sorted_columns.push(Series::new(series.name(), Arc::new(b.finish())));
+                }
+                arrow::datatypes::DataType::Int64 => {
+                    let arr = series.as_primitive::<arrow::array::Int64Array>()
+                        .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int64Array".to_string()))?;
+                    let mut b = arrow::array::Int64Builder::new();
+                    for &idx in &indices {
+                        if arr.is_valid(idx) {
+                            b.append_value(arr.value(idx));
+                        } else {
+                            b.append_null();
+                        }
+                    }
+                    sorted_columns.push(Series::new(series.name(), Arc::new(b.finish())));
+                }
+                arrow::datatypes::DataType::Float32 => {
+                    let arr = series.as_primitive::<arrow::array::Float32Array>()
+                        .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float32Array".to_string()))?;
+                    let mut b = arrow::array::Float32Builder::new();
                     for &idx in &indices {
                         if arr.is_valid(idx) {
                             b.append_value(arr.value(idx));

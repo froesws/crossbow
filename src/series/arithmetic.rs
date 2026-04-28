@@ -21,7 +21,12 @@ impl Series {
                 let mut builder = arrow::array::Int32Builder::new();
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
-                        builder.append_value(arr1.value(i).wrapping_add(arr2.value(i)));
+                        match arr1.value(i).checked_add(arr2.value(i)) {
+                            Some(v) => builder.append_value(v),
+                            None => return Err(CrossbowError::ArithmeticOverflow(
+                                format!("{} + {} overflows Int32 at index {}", arr1.value(i), arr2.value(i), i)
+                            )),
+                        }
                     } else {
                         builder.append_null();
                     }
@@ -67,7 +72,12 @@ impl Series {
                 let mut builder = arrow::array::Int32Builder::new();
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
-                        builder.append_value(arr1.value(i).wrapping_sub(arr2.value(i)));
+                        match arr1.value(i).checked_sub(arr2.value(i)) {
+                            Some(v) => builder.append_value(v),
+                            None => return Err(CrossbowError::ArithmeticOverflow(
+                                format!("{} - {} overflows Int32 at index {}", arr1.value(i), arr2.value(i), i)
+                            )),
+                        }
                     } else {
                         builder.append_null();
                     }
@@ -113,7 +123,12 @@ impl Series {
                 let mut builder = arrow::array::Int32Builder::new();
                 for i in 0..arr1.len() {
                     if arr1.is_valid(i) && arr2.is_valid(i) {
-                        builder.append_value(arr1.value(i).wrapping_mul(arr2.value(i)));
+                        match arr1.value(i).checked_mul(arr2.value(i)) {
+                            Some(v) => builder.append_value(v),
+                            None => return Err(CrossbowError::ArithmeticOverflow(
+                                format!("{} * {} overflows Int32 at index {}", arr1.value(i), arr2.value(i), i)
+                            )),
+                        }
                     } else {
                         builder.append_null();
                     }
