@@ -7,3 +7,7 @@
 // Error handling
 pub mod error;
 pub use error::CrossbowError;
+
+// Legacy modules (main implementation)
+pub mod series;
+pub use series::Series;
