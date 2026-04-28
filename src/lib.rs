@@ -22,3 +22,7 @@ pub use dataframe::DataFrame;
 
 // Operations modules (SRP-based organization - in development) 
 pub mod ops;
+
+// I/O operations
+pub mod io;
+pub use io::{read_csv, read_csv_infer, read_parquet};
