@@ -13,6 +13,10 @@ target
 # Contains mutation testing data
 **/mutants.out*/
 
+# Data files — strictly local, never commit
+*.csv
+*.parquet
+
 # Test output artifacts
 tests/output/
 
