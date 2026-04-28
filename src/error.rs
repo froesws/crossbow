@@ -4,7 +4,8 @@ use std::io;
 /// Central error type for all crossbow operations.
 ///
 /// Every fallible operation in the crate returns `Result<_, CrossbowError>`.
-/// Implements `Display`, `Debug`, and `From<ArrowError>` + `From<io::Error>`.
+/// Implements `Display`, `Debug`, `std::error::Error`,
+/// and `From<ArrowError>` + `From<io::Error>`.
 #[derive(Debug)]
 pub enum CrossbowError {
     /// Columns in a `DataFrame` have different row counts.
@@ -54,6 +55,8 @@ impl std::fmt::Display for CrossbowError {
         }
     }
 }
+
+impl std::error::Error for CrossbowError {}
 
 impl From<ArrowError> for CrossbowError {
     fn from(err: ArrowError) -> Self {
