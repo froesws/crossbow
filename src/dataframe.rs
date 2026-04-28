@@ -1,6 +1,4 @@
 use std::fmt;
-use arrow::array::Array;
-
 use crate::{CrossbowError, Series};
 
 #[cfg(test)]
@@ -134,5 +132,106 @@ impl DataFrame {
             .collect();
 
         DataFrame::new(new_columns)
+    }
+}
+
+impl fmt::Display for DataFrame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const HEAD: usize = 5;
+        const TAIL: usize = 5;
+        let (n_rows, n_cols) = self.shape();
+
+        if n_cols == 0 {
+            return write!(f, "DataFrame (0 columns, 0 rows)");
+        }
+
+        let mut col_widths: Vec<usize> = self.columns.iter().map(|s| s.name().len()).collect();
+        let rows_to_display: Vec<usize> = if n_rows > HEAD + TAIL {
+            (0..HEAD).chain(n_rows - TAIL..n_rows).collect()
+        } else {
+            (0..n_rows).collect()
+        };
+
+        for (i, series) in self.columns.iter().enumerate() {
+            for row_idx in &rows_to_display {
+                let val_str_len = series.get_value_as_string(*row_idx).len();
+                if val_str_len > col_widths[i] {
+                    col_widths[i] = val_str_len;
+                }
+            }
+        }
+
+        write!(f, "┌")?;
+        for width in &col_widths {
+            write!(f, "─{:-<width$}─", "")?;
+        }
+        writeln!(f, "┐")?;
+
+        write!(f, "│")?;
+        for (i, series) in self.columns.iter().enumerate() {
+            write!(f, " {:^width$} │", series.name(), width = col_widths[i])?;
+        }
+        writeln!(f)?;
+
+        write!(f, "├")?;
+        for width in &col_widths {
+            write!(f, "─{:-<width$}─", "")?;
+        }
+        writeln!(f, "┤")?;
+
+        if n_rows > HEAD + TAIL {
+            for i in 0..HEAD {
+                write!(f, "│")?;
+                for (j, series) in self.columns.iter().enumerate() {
+                    write!(
+                        f,
+                        " {:<width$} │",
+                        series.get_value_as_string(i),
+                        width = col_widths[j]
+                    )?;
+                }
+                writeln!(f)?;
+            }
+            write!(f, "│")?;
+            for width in &col_widths {
+                write!(f, " {:^width$} │", "...", width = *width)?;
+            }
+            writeln!(f)?;
+            for i in n_rows - TAIL..n_rows {
+                write!(f, "│")?;
+                for (j, series) in self.columns.iter().enumerate() {
+                    write!(
+                        f,
+                        " {:<width$} │",
+                        series.get_value_as_string(i),
+                        width = col_widths[j]
+                    )?;
+                }
+                writeln!(f)?;
+            }
+        } else {
+            for i in 0..n_rows {
+                write!(f, "│")?;
+                for (j, series) in self.columns.iter().enumerate() {
+                    write!(
+                        f,
+                        " {:<width$} │",
+                        series.get_value_as_string(i),
+                        width = col_widths[j]
+                    )?;
+                }
+                writeln!(f)?;
+            }
+        }
+
+        write!(f, "└")?;
+        for width in &col_widths {
+            write!(f, "─{:-<width$}─", "")?;
+        }
+        writeln!(f, "┘")?;
+
+        write!(f, "Shape: ({}, {})", n_rows, n_cols)?;
+
+        Ok(())
     }
 }
