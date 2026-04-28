@@ -160,66 +160,28 @@ impl Series {
     }
 
     /// Sample standard deviation (n-1 divisor). Returns `f64::NAN` if fewer
-    /// than 2 non-null values (undefined for fewer than 2 data points).
+    /// than 2 non-null values.
     pub fn std(&self) -> Result<f64, CrossbowError> {
-        if self.count_non_null()? < 2 {
-            return Ok(f64::NAN);
-        }
-
-        let mean = self.mean()?;
-        let mut variance = 0.0;
-        let mut count = 0;
-
-        match self.dtype() {
-            DataType::Int32 => {
-                let arr = self.as_primitive::<arrow::array::Int32Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
-                )?;
-                for i in 0..arr.len() {
-                    if arr.is_valid(i) {
-                        let val = arr.value(i) as f64;
-                        variance += (val - mean).powi(2);
-                        count += 1;
-                    }
-                }
-            }
-            DataType::Float64 => {
-                let arr = self.as_primitive::<arrow::array::Float64Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
-                )?;
-                for i in 0..arr.len() {
-                    if arr.is_valid(i) {
-                        let val = arr.value(i);
-                        variance += (val - mean).powi(2);
-                        count += 1;
-                    }
-                }
-            }
-            _ => {
-                return Err(CrossbowError::OperationNotSupported(
-                    format!("std() not supported for {:?}", self.dtype())
-                ));
-            }
-        }
-
-        if count < 2 {
-            return Ok(f64::NAN);
-        }
-
+        let (variance, count) = self.variance_sum()?;
+        if count < 2 { return Ok(f64::NAN); }
         Ok((variance / (count - 1) as f64).sqrt())
     }
 
     /// Sample variance (n-1 divisor). Returns `f64::NAN` if fewer than
-    /// 2 non-null values (undefined for fewer than 2 data points).
+    /// 2 non-null values.
     pub fn var(&self) -> Result<f64, CrossbowError> {
-        if self.count_non_null()? < 2 {
-            return Ok(f64::NAN);
-        }
+        let (variance, count) = self.variance_sum()?;
+        if count < 2 { return Ok(f64::NAN); }
+        Ok(variance / (count - 1) as f64)
+    }
 
+    fn variance_sum(&self) -> Result<(f64, usize), CrossbowError> {
+        if self.count_non_null()? < 2 {
+            return Ok((0.0, 0));
+        }
         let mean = self.mean()?;
         let mut variance = 0.0;
         let mut count = 0;
-
         match self.dtype() {
             DataType::Int32 => {
                 let arr = self.as_primitive::<arrow::array::Int32Array>().ok_or_else(
@@ -227,8 +189,7 @@ impl Series {
                 )?;
                 for i in 0..arr.len() {
                     if arr.is_valid(i) {
-                        let val = arr.value(i) as f64;
-                        variance += (val - mean).powi(2);
+                        variance += (arr.value(i) as f64 - mean).powi(2);
                         count += 1;
                     }
                 }
@@ -239,23 +200,17 @@ impl Series {
                 )?;
                 for i in 0..arr.len() {
                     if arr.is_valid(i) {
-                        let val = arr.value(i);
-                        variance += (val - mean).powi(2);
+                        variance += (arr.value(i) - mean).powi(2);
                         count += 1;
                     }
                 }
             }
             _ => {
                 return Err(CrossbowError::OperationNotSupported(
-                    format!("var() not supported for {:?}", self.dtype())
+                    format!("std/var not supported for {:?}", self.dtype())
                 ));
             }
         }
-
-        if count < 2 {
-            return Ok(f64::NAN);
-        }
-
-        Ok(variance / (count - 1) as f64)
+        Ok((variance, count))
     }
 }
