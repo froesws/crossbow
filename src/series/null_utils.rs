@@ -5,6 +5,7 @@ use arrow::datatypes::DataType;
 use arrow::array::Array;
 use crate::error::CrossbowError;
 use crate::series::Series;
+use crate::{build_column, build_string_column};
 
 impl Series {
     /// Returns a boolean `Series` indicating which elements are null.
@@ -80,46 +81,18 @@ impl Series {
     ///
     /// Supports `Int32`, `Float64`, and `Utf8`.
     pub fn drop_null(&self) -> Result<Series, CrossbowError> {
-        match self.dtype() {
-            DataType::Int32 => {
-                let arr = self.as_primitive::<arrow::array::Int32Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Int32Array".to_string()),
-                )?;
-                let mut builder = arrow::array::Int32Builder::with_capacity(self.len());
-                for i in 0..arr.len() {
-                    if arr.is_valid(i) {
-                        builder.append_value(arr.value(i));
-                    }
-                }
-                Ok(Series::new(format!("{}_no_null", self.name()), Arc::new(builder.finish())))
-            }
-            DataType::Float64 => {
-                let arr = self.as_primitive::<arrow::array::Float64Array>().ok_or_else(
-                    || CrossbowError::TypeMismatch("Expected Float64Array".to_string()),
-                )?;
-                let mut builder = arrow::array::Float64Builder::with_capacity(self.len());
-                for i in 0..arr.len() {
-                    if arr.is_valid(i) {
-                        builder.append_value(arr.value(i));
-                    }
-                }
-                Ok(Series::new(format!("{}_no_null", self.name()), Arc::new(builder.finish())))
-            }
-            DataType::Utf8 => {
-                let arr = self.data.as_any().downcast_ref::<arrow::array::StringArray>()
-                    .ok_or_else(|| CrossbowError::TypeMismatch("Expected StringArray".to_string()))?;
-                let mut builder = arrow::array::StringBuilder::with_capacity(self.len(), self.len() * 32);
-                for i in 0..arr.len() {
-                    if arr.is_valid(i) {
-                        builder.append_value(arr.value(i));
-                    }
-                }
-                Ok(Series::new(format!("{}_no_null", self.name()), Arc::new(builder.finish())))
-            }
-            _ => Err(CrossbowError::OperationNotSupported(
+        let valid: Vec<usize> = (0..self.len()).filter(|&i| self.data.is_valid(i)).collect();
+        let n = valid.len();
+        let d = self.data();
+        let built = match self.dtype() {
+            DataType::Int32 => build_column!(d.as_ref(), &valid, arrow::array::Int32Builder, arrow::array::Int32Array, n),
+            DataType::Float64 => build_column!(d.as_ref(), &valid, arrow::array::Float64Builder, arrow::array::Float64Array, n),
+            DataType::Utf8 => build_string_column!(d.as_ref(), &valid, n),
+            _ => return Err(CrossbowError::OperationNotSupported(
                 format!("drop_null not supported for {:?}", self.dtype())
             )),
-        }
+        };
+        Ok(Series::new(format!("{}_no_null", self.name()), built))
     }
 
     /// Returns the value at `index` as a `String`.
