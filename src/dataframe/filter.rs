@@ -2,13 +2,12 @@
 
 use std::sync::Arc;
 use arrow::array::Array;
+use arrow::datatypes::DataType;
 use crate::{CrossbowError, DataFrame, Series};
+use crate::{build_column, build_string_column};
 
 impl DataFrame {
     /// Filters rows using a boolean mask `Series`.
-    ///
-    /// Keeps rows where the mask is `true`. The mask must match the
-    /// DataFrame's row count.
     pub fn filter_by_mask(&self, mask: &Series) -> Result<DataFrame, CrossbowError> {
         if mask.len() != self.shape().0 {
             return Err(CrossbowError::MismatchedColumnLengths);
@@ -21,86 +20,22 @@ impl DataFrame {
             .filter(|&i| mask_array.is_valid(i) && mask_array.value(i))
             .collect();
 
+        let n = indices.len();
         let mut filtered_columns = Vec::new();
         for series in &self.columns {
-
-            match series.dtype() {
-                arrow::datatypes::DataType::Int32 => {
-                    let arr = series.as_primitive::<arrow::array::Int32Array>()
-                        .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int32Array".to_string()))?;
-                    let mut b = arrow::array::Int32Builder::with_capacity(indices.len());
-                    for &idx in &indices {
-                        if arr.is_valid(idx) {
-                            b.append_value(arr.value(idx));
-                        } else {
-                            b.append_null();
-                        }
-                    }
-                    let arr = b.finish();
-                    filtered_columns.push(Series::new(series.name(), Arc::new(arr)));
-                }
-                arrow::datatypes::DataType::Int64 => {
-                    let arr = series.as_primitive::<arrow::array::Int64Array>()
-                        .ok_or_else(|| CrossbowError::TypeMismatch("Expected Int64Array".to_string()))?;
-                    let mut b = arrow::array::Int64Builder::with_capacity(indices.len());
-                    for &idx in &indices {
-                        if arr.is_valid(idx) {
-                            b.append_value(arr.value(idx));
-                        } else {
-                            b.append_null();
-                        }
-                    }
-                    let arr = b.finish();
-                    filtered_columns.push(Series::new(series.name(), Arc::new(arr)));
-                }
-                arrow::datatypes::DataType::Float32 => {
-                    let arr = series.as_primitive::<arrow::array::Float32Array>()
-                        .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float32Array".to_string()))?;
-                    let mut b = arrow::array::Float32Builder::with_capacity(indices.len());
-                    for &idx in &indices {
-                        if arr.is_valid(idx) {
-                            b.append_value(arr.value(idx));
-                        } else {
-                            b.append_null();
-                        }
-                    }
-                    let arr = b.finish();
-                    filtered_columns.push(Series::new(series.name(), Arc::new(arr)));
-                }
-                arrow::datatypes::DataType::Float64 => {
-                    let arr = series.as_primitive::<arrow::array::Float64Array>()
-                        .ok_or_else(|| CrossbowError::TypeMismatch("Expected Float64Array".to_string()))?;
-                    let mut b = arrow::array::Float64Builder::with_capacity(indices.len());
-                    for &idx in &indices {
-                        if arr.is_valid(idx) {
-                            b.append_value(arr.value(idx));
-                        } else {
-                            b.append_null();
-                        }
-                    }
-                    let arr = b.finish();
-                    filtered_columns.push(Series::new(series.name(), Arc::new(arr)));
-                }
-                arrow::datatypes::DataType::Utf8 => {
-                    let arr = series.data().as_any().downcast_ref::<arrow::array::StringArray>()
-                        .ok_or_else(|| CrossbowError::TypeMismatch("Expected StringArray".to_string()))?;
-                    let mut b = arrow::array::StringBuilder::with_capacity(indices.len(), indices.len() * 32);
-                    for &idx in &indices {
-                        if arr.is_valid(idx) {
-                            b.append_value(arr.value(idx));
-                        } else {
-                            b.append_null();
-                        }
-                    }
-                    let arr = b.finish();
-                    filtered_columns.push(Series::new(series.name(), Arc::new(arr)));
-                }
-                _ => {
-                    return Err(CrossbowError::OperationNotSupported(
-                        format!("Filtering not supported for {:?}", series.dtype())
-                    ));
-                }
+            let arr = series.data();
+            let built = match series.dtype() {
+                DataType::Int32 => build_column!(arr.as_ref(), &indices, arrow::array::Int32Builder, arrow::array::Int32Array, n),
+                DataType::Int64 => build_column!(arr.as_ref(), &indices, arrow::array::Int64Builder, arrow::array::Int64Array, n),
+                DataType::Float32 => build_column!(arr.as_ref(), &indices, arrow::array::Float32Builder, arrow::array::Float32Array, n),
+                DataType::Float64 => build_column!(arr.as_ref(), &indices, arrow::array::Float64Builder, arrow::array::Float64Array, n),
+                DataType::Utf8 => build_string_column!(arr.as_ref(), &indices, n),
+                DataType::Boolean => build_column!(arr.as_ref(), &indices, arrow::array::BooleanBuilder, arrow::array::BooleanArray, n),
+                _ => return Err(CrossbowError::OperationNotSupported(
+                    format!("Filtering not supported for {:?}", series.dtype())
+                )),
             };
+            filtered_columns.push(Series::new(series.name(), built));
         }
 
         DataFrame::new(filtered_columns)
