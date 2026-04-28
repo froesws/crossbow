@@ -3,4 +3,7 @@
 //! For now, the legacy modules (series, dataframe) are the main exports
 
 pub mod series;
+pub mod dataframe;
+
 pub use series::Series;
+pub use dataframe::DataFrame;
