@@ -421,3 +421,167 @@ fn test_groupby_all_unique() {
         assert_eq!(result.get_row(i).unwrap()[1], "1");
     }
 }
+
+fn load_departments() -> DataFrame {
+    let dept_id = Series::from("department_id", vec![10i32, 20, 30, 50]);
+    let dept_name = Series::from("department_name", vec!["Engineering", "Marketing", "Sales", "Finance"]);
+    DataFrame::new(vec![dept_id, dept_name]).unwrap()
+}
+
+fn load_employees() -> DataFrame {
+    let emp_id = Series::from("employee_id", vec![1i32, 2, 3, 4, 5]);
+    let emp_name = Series::from("employee_name", vec!["Alice", "Bob", "Charlie", "David", "Eve"]);
+    let dept_id = Series::from("department_id", vec![10i32, 20, 40, 10, 30]);
+    DataFrame::new(vec![emp_id, emp_name, dept_id]).unwrap()
+}
+
+fn make_int_df(columns: Vec<(&str, Vec<i32>)>) -> DataFrame {
+    let series: Vec<Series> = columns.into_iter().map(|(name, vals)| {
+        Series::from(&name.to_string(), vals)
+    }).collect();
+    DataFrame::new(series).unwrap()
+}
+
+#[test]
+fn test_join_inner_basic() {
+    let emp = load_employees();
+    let dept = load_departments();
+    let result = emp.join_inner(&dept, "department_id", "department_id").unwrap();
+
+    assert_eq!(result.shape().0, 4);
+    let cols = result.get_column_names();
+    assert!(cols.contains(&"employee_name"));
+    assert!(cols.contains(&"department_name"));
+    assert!(!cols.contains(&"employee_id_right"));
+
+    let mut names: Vec<_> = (0..result.shape().0).map(|i| {
+        let r = result.get_row(i).unwrap();
+        format!("{}|{}", r[1], r[3])
+    }).collect();
+    names.sort();
+    assert_eq!(names, vec![
+        "\"Alice\"|\"Engineering\"",
+        "\"Bob\"|\"Marketing\"",
+        "\"David\"|\"Engineering\"",
+        "\"Eve\"|\"Sales\"",
+    ]);
+}
+
+#[test]
+fn test_join_inner_no_matches_returns_empty() {
+    let emp = load_employees();
+    let small = make_int_df(vec![("id", vec![99i32]), ("x", vec![0])]);
+    let result = emp.join_inner(&small, "employee_id", "id").unwrap();
+    assert_eq!(result.shape().0, 0);
+}
+
+#[test]
+fn test_join_inner_one_to_many() {
+    let left = make_int_df(vec![("a", vec![1i32, 2]), ("b", vec![10, 20])]);
+    let right = DataFrame::new(vec![
+        Series::from("a", vec![1i32, 1, 2]),
+        Series::from("c", vec!["foo", "bar", "baz"]),
+    ]).unwrap();
+    let result = left.join_inner(&right, "a", "a").unwrap();
+    assert_eq!(result.shape().0, 3);
+}
+
+#[test]
+fn test_join_left_keeps_unmatched() {
+    let emp = load_employees();
+    let dept = load_departments();
+    let result = emp.join_left(&dept, "department_id", "department_id").unwrap();
+
+    assert_eq!(result.shape().0, 5);
+    let charlie = result.get_rows(&[2]).unwrap();
+    assert_eq!(charlie[0][1], "\"Charlie\"");
+    assert_eq!(charlie[0][3], "null");
+}
+
+#[test]
+fn test_join_left_all_right_cols_null_for_unmatched() {
+    let emp = load_employees();
+    let dept = load_departments();
+    let result = emp.join_left(&dept, "department_id", "department_id").unwrap();
+
+    let row3 = result.get_row(2).unwrap();
+    assert_eq!(row3[1], "\"Charlie\"");
+    assert!(row3[3] == "null");
+}
+
+#[test]
+fn test_join_outer_keeps_all_both_sides() {
+    let emp = load_employees();
+    let dept = load_departments();
+    let result = emp.join_outer(&dept, "department_id", "department_id").unwrap();
+
+    let rows = result.shape().0;
+    assert!(rows >= 5);
+    assert!(rows <= 7);
+
+    let seen_depts: Vec<String> = (0..rows)
+        .map(|i| {
+            let r = result.get_row(i).unwrap();
+            format!("{}|{}", r[3], r[1])
+        })
+        .collect();
+
+    assert!(seen_depts.contains(&"\"Finance\"|null".to_string()));
+    assert!(seen_depts.contains(&"null|\"Charlie\"".to_string()));
+}
+
+#[test]
+fn test_join_outer_unmatched_right_row() {
+    let emp = load_employees();
+    let dept = load_departments();
+    let result = emp.join_outer(&dept, "department_id", "department_id").unwrap();
+
+    let finance_row = (0..result.shape().0)
+        .find(|&i| {
+            let r = result.get_row(i).unwrap();
+            r[3] == "\"Finance\""
+        })
+        .map(|i| result.get_row(i).unwrap());
+
+    assert!(finance_row.is_some());
+    let fr = finance_row.unwrap();
+    assert_eq!(fr[3], "\"Finance\"");
+    assert_eq!(fr[1], "null");
+}
+
+#[test]
+fn test_join_outer_unmatched_left_row() {
+    let emp = load_employees();
+    let dept = load_departments();
+    let result = emp.join_outer(&dept, "department_id", "department_id").unwrap();
+
+    let charlie_row = (0..result.shape().0)
+        .find(|&i| {
+            let r = result.get_row(i).unwrap();
+            r[1] == "\"Charlie\""
+        })
+        .map(|i| result.get_row(i).unwrap());
+
+    assert!(charlie_row.is_some());
+    let cr = charlie_row.unwrap();
+    assert_eq!(cr[1], "\"Charlie\"");
+    assert_eq!(cr[3], "null");
+}
+
+#[test]
+fn test_join_column_collision_renames() {
+    let left = make_int_df(vec![("id", vec![1i32]), ("name", vec![10])]);
+    let right = make_int_df(vec![("id", vec![1i32]), ("name", vec![20])]);
+    let result = left.join_inner(&right, "id", "id").unwrap();
+    let cols = result.get_column_names();
+    assert!(cols.contains(&"name"));
+    assert!(cols.contains(&"name_right"));
+}
+
+#[test]
+fn test_join_error_key_not_found() {
+    let df = load_employees();
+    let err = df.join_inner(&df, "missing", "employee_id");
+    assert!(err.is_err());
+    assert!(matches!(err, Err(CrossbowError::ColumnNotFound(_))));
+}
