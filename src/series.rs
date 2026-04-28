@@ -184,3 +184,64 @@ impl_into_series_for_numerics!(u32, arrow::array::UInt32Array);
 impl_into_series_for_numerics!(u64, arrow::array::UInt64Array);
 impl_into_series_for_numerics!(f32, arrow::array::Float32Array);
 impl_into_series_for_numerics!(f64, arrow::array::Float64Array);
+
+impl std::fmt::Display for Series {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        const HEAD: usize = 5;
+        const TAIL: usize = 5;
+        let len = self.len();
+
+        let mut values_to_display = Vec::new();
+
+        if len > HEAD + TAIL {
+            for i in 0..HEAD {
+                values_to_display.push(self.get_value_as_string(i));
+            }
+            for i in (len - TAIL)..len {
+                values_to_display.push(self.get_value_as_string(i));
+            }
+        } else {
+            for i in 0..len {
+                values_to_display.push(self.get_value_as_string(i));
+            }
+        }
+
+        let index_width = len.saturating_sub(1).to_string().len();
+
+        let data_width = values_to_display
+            .iter()
+            .map(|s| s.len())
+            .max()
+            .unwrap_or(0)
+            .max(self.name().len());
+
+        writeln!(f, "┌─{:-<index_width$}─┬─{:-<data_width$}─┐", "", "")?;
+        writeln!(f, "│ {:>index_width$} │ {:^data_width$} │", "", self.name())?;
+        writeln!(f, "├─{:-<index_width$}─┼─{:-<data_width$}─┤", "", "")?;
+
+        if len > HEAD + TAIL {
+            for (i, item) in values_to_display.iter().enumerate().take(HEAD) {
+                writeln!(f, "│ {:>index_width$} │ {:<data_width$} │", i, item)?;
+            }
+            writeln!(f, "│ {:^index_width$} │ {:^data_width$} │", "...", "...")?;
+            for i in 0..TAIL {
+                let original_index = len - TAIL + i;
+                let value_index = HEAD + i;
+                writeln!(
+                    f,
+                    "│ {:>index_width$} │ {:<data_width$} │",
+                    original_index, values_to_display[value_index]
+                )?;
+            }
+        } else {
+            for (i, item) in values_to_display.iter().enumerate().take(HEAD) {
+                writeln!(f, "│ {:>index_width$} │ {:<data_width$} │", i, item)?;
+            }
+        }
+
+        writeln!(f, "└─{:-<index_width$}─┴─{:-<data_width$}─┘", "", "")?;
+        write!(f, "DataType: {:?}", self.dtype())?;
+
+        Ok(())
+    }
+}
