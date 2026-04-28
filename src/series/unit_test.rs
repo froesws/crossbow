@@ -371,3 +371,50 @@ fn test_single_element_arithmetic() {
     let product = s1.multiply(&s2).unwrap();
     assert_eq!(product.get_value_as_string(0), "50");
 }
+
+#[test]
+fn test_mean_all_null_returns_nan() {
+    let all_null: Vec<Option<i32>> = vec![None, None, None];
+    let series = Series::from("null_series", all_null);
+    let mean = series.mean().unwrap();
+    assert!(mean.is_nan(), "Expected NaN, got {}", mean);
+}
+
+#[test]
+fn test_mean_empty_series_returns_nan() {
+    let empty: Vec<i32> = vec![];
+    let series = Series::from("empty", empty);
+    let mean = series.mean().unwrap();
+    assert!(mean.is_nan(), "Expected NaN for empty series, got {}", mean);
+}
+
+#[test]
+fn test_std_single_value_returns_nan() {
+    let single = Series::from("single", vec![42i32]);
+    let std_val = single.std().unwrap();
+    assert!(std_val.is_nan(), "Expected NaN for single value std, got {}", std_val);
+}
+
+#[test]
+fn test_std_two_values_returns_valid() {
+    let two = Series::from("two", vec![10i32, 20]);
+    let std_val = two.std().unwrap();
+    assert!(!std_val.is_nan());
+    assert!(std_val > 0.0);
+}
+
+#[test]
+fn test_var_all_null_returns_nan() {
+    let all_null: Vec<Option<i32>> = vec![None, None, None];
+    let series = Series::from("null_series", all_null);
+    let var_val = series.var().unwrap();
+    assert!(var_val.is_nan(), "Expected NaN for all-null var, got {}", var_val);
+}
+
+#[test]
+fn test_var_single_value_returns_nan() {
+    let single = Series::from("single", vec![42i32]);
+    let var_val = single.var().unwrap();
+    assert!(var_val.is_nan(), "Expected NaN for single value var, got {}", var_val);
+}
+
