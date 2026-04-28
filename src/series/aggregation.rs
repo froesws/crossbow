@@ -42,14 +42,15 @@ impl Series {
         }
     }
 
-    /// Arithmetic mean of all non-null values. Returns `0.0` if all null.
+    /// Arithmetic mean of all non-null values. Returns `f64::NAN` if the
+    /// `Series` is empty or all values are null (mean of empty set is undefined).
     pub fn mean(&self) -> Result<f64, CrossbowError> {
         match self.dtype() {
             DataType::Int32 | DataType::Float64 => {
                 let sum = self.sum()?;
                 let count = self.count_non_null()?;
                 if count == 0 {
-                    Ok(0.0)
+                    Ok(f64::NAN)
                 } else {
                     Ok(sum / count as f64)
                 }
@@ -158,10 +159,11 @@ impl Series {
         Ok(count)
     }
 
-    /// Sample standard deviation (n-1 divisor). Returns `0.0` if fewer than 2 non-null values.
+    /// Sample standard deviation (n-1 divisor). Returns `f64::NAN` if fewer
+    /// than 2 non-null values (undefined for fewer than 2 data points).
     pub fn std(&self) -> Result<f64, CrossbowError> {
         if self.count_non_null()? < 2 {
-            return Ok(0.0);
+            return Ok(f64::NAN);
         }
 
         let mean = self.mean()?;
@@ -201,16 +203,17 @@ impl Series {
         }
 
         if count < 2 {
-            return Ok(0.0);
+            return Ok(f64::NAN);
         }
 
         Ok((variance / (count - 1) as f64).sqrt())
     }
 
-    /// Sample variance (n-1 divisor). Returns `0.0` if fewer than 2 non-null values.
+    /// Sample variance (n-1 divisor). Returns `f64::NAN` if fewer than
+    /// 2 non-null values (undefined for fewer than 2 data points).
     pub fn var(&self) -> Result<f64, CrossbowError> {
         if self.count_non_null()? < 2 {
-            return Ok(0.0);
+            return Ok(f64::NAN);
         }
 
         let mean = self.mean()?;
@@ -250,7 +253,7 @@ impl Series {
         }
 
         if count < 2 {
-            return Ok(0.0);
+            return Ok(f64::NAN);
         }
 
         Ok(variance / (count - 1) as f64)
