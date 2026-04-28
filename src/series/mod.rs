@@ -132,28 +132,40 @@ impl Series {
 
         match self.dtype() {
             DataType::Int32 => {
-                let array = self.data.as_any().downcast_ref::<arrow::array::Int32Array>().unwrap();
-                array.value(index).to_string()
+                match self.data.as_any().downcast_ref::<arrow::array::Int32Array>() {
+                    Some(array) => array.value(index).to_string(),
+                    None => "Invalid Int32 array".to_string(),
+                }
             }
             DataType::Int64 => {
-                let array = self.data.as_any().downcast_ref::<arrow::array::Int64Array>().unwrap();
-                array.value(index).to_string()
+                match self.data.as_any().downcast_ref::<arrow::array::Int64Array>() {
+                    Some(array) => array.value(index).to_string(),
+                    None => "Invalid Int64 array".to_string(),
+                }
             }
             DataType::Float32 => {
-                let array = self.data.as_any().downcast_ref::<arrow::array::Float32Array>().unwrap();
-                array.value(index).to_string()
+                match self.data.as_any().downcast_ref::<arrow::array::Float32Array>() {
+                    Some(array) => array.value(index).to_string(),
+                    None => "Invalid Float32 array".to_string(),
+                }
             }
             DataType::Float64 => {
-                let array = self.data.as_any().downcast_ref::<arrow::array::Float64Array>().unwrap();
-                array.value(index).to_string()
+                match self.data.as_any().downcast_ref::<arrow::array::Float64Array>() {
+                    Some(array) => array.value(index).to_string(),
+                    None => "Invalid Float64 array".to_string(),
+                }
             }
             DataType::Utf8 => {
-                let array = self.data.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
-                format!("\"{}\"", array.value(index))
+                match self.data.as_any().downcast_ref::<arrow::array::StringArray>() {
+                    Some(array) => format!("\"{}\"", array.value(index)),
+                    None => "Invalid String array".to_string(),
+                }
             }
             DataType::Boolean => {
-                let array = self.data.as_any().downcast_ref::<arrow::array::BooleanArray>().unwrap();
-                array.value(index).to_string()
+                match self.data.as_any().downcast_ref::<arrow::array::BooleanArray>() {
+                    Some(array) => array.value(index).to_string(),
+                    None => "Invalid Boolean array".to_string(),
+                }
             }
             other_type => format!("Unsupported type: {:?}", other_type),
         }
