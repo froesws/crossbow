@@ -9,6 +9,19 @@ impl DataFrame {
     ///
     /// Returns a [`GroupedDataFrame`] that supports `count`, `sum`, and `mean`
     /// aggregation per group.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let cat = Series::from("cat", vec!["a", "b", "a"]);
+    /// let val = Series::from("val", vec![1i32, 2, 3]);
+    /// let df = DataFrame::new(vec![cat, val]).unwrap();
+    /// let grouped = df.group_by("cat").unwrap();
+    /// let result = grouped.sum("val").unwrap();
+    /// assert_eq!(result.shape(), (2, 2));
+    /// ```
     pub fn group_by(&self, column_name: &str) -> Result<GroupedDataFrame, CrossbowError> {
         let group_col = self.select(column_name)?;
         let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
@@ -29,6 +42,19 @@ impl DataFrame {
 /// A grouped `DataFrame` produced by [`DataFrame::group_by`].
 ///
 /// Supports `count()`, `sum()`, and `mean()` aggregation per group.
+///
+/// # Examples
+///
+/// ```
+/// use crossbow::{DataFrame, Series};
+///
+/// let cat = Series::from("cat", vec!["a", "b", "a"]);
+/// let val = Series::from("val", vec![1i32, 2, 3]);
+/// let df = DataFrame::new(vec![cat, val]).unwrap();
+/// let grouped = df.group_by("cat").unwrap();
+/// let result = grouped.count().unwrap();
+/// assert_eq!(result.shape(), (2, 2));
+/// ```
 #[derive(Debug, Clone)]
 pub struct GroupedDataFrame {
     dataframe: DataFrame,
@@ -38,6 +64,19 @@ pub struct GroupedDataFrame {
 
 impl GroupedDataFrame {
     /// Counts rows in each group. Returns a `DataFrame` with the grouping key and a `count` column.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let cat = Series::from("cat", vec!["x", "x", "y"]);
+    /// let val = Series::from("val", vec![1i32, 2, 3]);
+    /// let df = DataFrame::new(vec![cat, val]).unwrap();
+    /// let grouped = df.group_by("cat").unwrap();
+    /// let counts = grouped.count().unwrap();
+    /// assert_eq!(counts.shape(), (2, 2));
+    /// ```
     pub fn count(&self) -> Result<DataFrame, CrossbowError> {
         let mut keys = Vec::new();
         let mut counts = Vec::new();
@@ -54,6 +93,20 @@ impl GroupedDataFrame {
     }
 
     /// Computes the sum of a numeric column for each group.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let cat = Series::from("cat", vec!["a", "b", "a"]);
+    /// let val = Series::from("val", vec![10i32, 20, 30]);
+    /// let df = DataFrame::new(vec![cat, val]).unwrap();
+    /// let grouped = df.group_by("cat").unwrap();
+    /// let result = grouped.sum("val").unwrap();
+    /// // a=40, b=20
+    /// assert_eq!(result.shape().0, 2);
+    /// ```
     pub fn sum(&self, column_name: &str) -> Result<DataFrame, CrossbowError> {
         let agg_col = self.dataframe.select(column_name)?;
 
@@ -99,6 +152,20 @@ impl GroupedDataFrame {
     }
 
     /// Computes the arithmetic mean of a numeric column for each group.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let cat = Series::from("cat", vec!["a", "a", "b"]);
+    /// let val = Series::from("val", vec![10i32, 20, 30]);
+    /// let df = DataFrame::new(vec![cat, val]).unwrap();
+    /// let grouped = df.group_by("cat").unwrap();
+    /// let result = grouped.mean("val").unwrap();
+    /// // a=15, b=30
+    /// assert_eq!(result.shape().0, 2);
+    /// ```
     pub fn mean(&self, column_name: &str) -> Result<DataFrame, CrossbowError> {
         let agg_col = self.dataframe.select(column_name)?;
 

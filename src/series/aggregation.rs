@@ -11,6 +11,15 @@ use crate::expected_array;
 
 impl Series {
     /// Sum of all non-null values. Returns `0.0` if all values are null.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![1i32, 2, 3, 4]);
+    /// assert_eq!(s.sum().unwrap(), 10.0);
+    /// ```
     pub fn sum(&self) -> Result<f64, CrossbowError> {
         match self.dtype() {
             DataType::Int32 => {
@@ -45,6 +54,15 @@ impl Series {
 
     /// Arithmetic mean of all non-null values. Returns `f64::NAN` if the
     /// `Series` is empty or all values are null (mean of empty set is undefined).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![2.0, 4.0, 6.0]);
+    /// assert_eq!(s.mean().unwrap(), 4.0);
+    /// ```
     pub fn mean(&self) -> Result<f64, CrossbowError> {
         match self.dtype() {
             DataType::Int32 | DataType::Float64 => {
@@ -63,6 +81,15 @@ impl Series {
     }
 
     /// Minimum non-null value. Returns `None` if all values are null or the `Series` is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![3i32, 1, 4, 2]);
+    /// assert_eq!(s.min().unwrap(), Some(1.0));
+    /// ```
     pub fn min(&self) -> Result<Option<f64>, CrossbowError> {
         match self.dtype() {
             DataType::Int32 => {
@@ -104,6 +131,15 @@ impl Series {
     }
 
     /// Maximum non-null value. Returns `None` if all values are null or the `Series` is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![3i32, 1, 4, 2]);
+    /// assert_eq!(s.max().unwrap(), Some(4.0));
+    /// ```
     pub fn max(&self) -> Result<Option<f64>, CrossbowError> {
         match self.dtype() {
             DataType::Int32 => {
@@ -145,11 +181,29 @@ impl Series {
     }
 
     /// Total number of elements (including nulls). Same as [`Series::len`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![1i32, 2, 3]);
+    /// assert_eq!(s.count(), 3);
+    /// ```
     pub fn count(&self) -> usize {
         self.len()
     }
 
     /// Count of non-null elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![Some(1i32), None, Some(3)]);
+    /// assert_eq!(s.count_non_null().unwrap(), 2);
+    /// ```
     pub fn count_non_null(&self) -> Result<usize, CrossbowError> {
         let mut count = 0;
         for i in 0..self.len() {
@@ -162,6 +216,16 @@ impl Series {
 
     /// Sample standard deviation (n-1 divisor). Returns `f64::NAN` if fewer
     /// than 2 non-null values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]);
+    /// let stddev = s.std().unwrap();
+    /// assert!(stddev > 0.0);
+    /// ```
     pub fn std(&self) -> Result<f64, CrossbowError> {
         let (variance, count) = self.variance_sum()?;
         if count < 2 { return Ok(f64::NAN); }
@@ -170,12 +234,23 @@ impl Series {
 
     /// Sample variance (n-1 divisor). Returns `f64::NAN` if fewer than
     /// 2 non-null values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![2.0, 4.0, 6.0]);
+    /// assert!(s.var().unwrap() > 0.0);
+    /// ```
     pub fn var(&self) -> Result<f64, CrossbowError> {
         let (variance, count) = self.variance_sum()?;
         if count < 2 { return Ok(f64::NAN); }
         Ok(variance / (count - 1) as f64)
     }
 
+    // Computes the sum of squared deviations from the mean and the count of non-null
+    // values. Used as a helper by std() and var() to avoid double iteration.
     fn variance_sum(&self) -> Result<(f64, usize), CrossbowError> {
         if self.count_non_null()? < 2 {
             return Ok((0.0, 0));

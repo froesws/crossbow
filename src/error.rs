@@ -6,6 +6,15 @@ use std::io;
 /// Every fallible operation in the crate returns `Result<_, CrossbowError>`.
 /// Implements `Display`, `Debug`, `std::error::Error`,
 /// and `From<ArrowError>` + `From<io::Error>`.
+///
+/// # Examples
+///
+/// ```
+/// use crossbow::CrossbowError;
+///
+/// let err = CrossbowError::ColumnNotFound("missing_col".into());
+/// assert!(format!("{}", err).contains("missing_col"));
+/// ```
 #[derive(Debug)]
 pub enum CrossbowError {
     /// Columns in a `DataFrame` have different row counts.

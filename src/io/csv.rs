@@ -1,3 +1,7 @@
+//! CSV I/O for `DataFrame`.
+//!
+//! Reads CSV files with automatic type inference and header-based column naming.
+//! Writes DataFrames with a header row using the Arrow CSV writer.
 use std::fs::File;
 use std::sync::Arc;
 use arrow::array::RecordBatch;
@@ -7,6 +11,7 @@ use arrow::datatypes::{Field, Schema};
 use arrow::record_batch::RecordBatchWriter;
 use crate::{CrossbowError, DataFrame, Series};
 
+// Constructs an Arrow Schema from the column names and data types of a DataFrame.
 fn build_schema(df: &DataFrame) -> Arc<Schema> {
     let fields: Vec<Field> = df.columns()
         .iter()
@@ -15,6 +20,8 @@ fn build_schema(df: &DataFrame) -> Arc<Schema> {
     Arc::new(Schema::new(fields))
 }
 
+// Converts a DataFrame into an Arrow RecordBatch, pairing the schema with column arrays
+// for use with Arrow-based CSV and Parquet writers.
 fn df_to_record_batch(df: &DataFrame) -> Result<RecordBatch, CrossbowError> {
     let schema = build_schema(df);
     let arrays: Vec<Arc<dyn arrow::array::Array>> = df.columns()
@@ -31,6 +38,15 @@ fn df_to_record_batch(df: &DataFrame) -> Result<RecordBatch, CrossbowError> {
 /// Arrow types are inferred from the data. All columns are loaded into memory.
 ///
 /// Supports `Int32`, `Int64`, `Float32`, `Float64`, `Utf8`, and `Boolean` columns.
+///
+/// # Examples
+///
+/// ```no_run
+/// use crossbow::read_csv;
+///
+/// let df = read_csv("data.csv").unwrap();
+/// println!("{}", df.shape().0);
+/// ```
 pub fn read_csv(path: &str) -> Result<DataFrame, CrossbowError> {
     let file = File::open(path).map_err(|e| CrossbowError::IoError(e.to_string()))?;
 
@@ -64,6 +80,17 @@ pub fn read_csv(path: &str) -> Result<DataFrame, CrossbowError> {
 /// Writes a `DataFrame` to a CSV file with a header row.
 ///
 /// Uses the Arrow CSV writer for efficient vectorized output.
+///
+/// # Examples
+///
+/// ```no_run
+/// use crossbow::{DataFrame, Series, write_csv};
+///
+/// let df = DataFrame::new(vec![
+///     Series::from("x", vec![1i32, 2]),
+/// ]).unwrap();
+/// write_csv(&df, "output.csv").unwrap();
+/// ```
 pub fn write_csv(df: &DataFrame, path: &str) -> Result<(), CrossbowError> {
     let batch = df_to_record_batch(df)?;
     let file = File::create(path).map_err(|e| CrossbowError::IoError(e.to_string()))?;

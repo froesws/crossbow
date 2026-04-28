@@ -17,6 +17,17 @@ impl Series {
     ///
     /// Both `Series` must have the same length and compatible types.
     /// Supports `Int32` and `Float64`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let a = Series::from("a", vec![1i32, 2, 3]);
+    /// let b = Series::from("b", vec![4i32, 5, 6]);
+    /// let c = a.add(&b).unwrap();
+    /// assert_eq!(c.len(), 3);
+    /// ```
     pub fn add(&self, other: &Series) -> Result<Series, CrossbowError> {
         binary_op(self, other, "+",
             |a, b| a.checked_add(b),
@@ -26,6 +37,17 @@ impl Series {
     }
 
     /// Element-wise subtraction: `self[i] - other[i]`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let a = Series::from("a", vec![10i32, 20]);
+    /// let b = Series::from("b", vec![3i32, 5]);
+    /// let c = a.subtract(&b).unwrap();
+    /// assert_eq!(c.len(), 2);
+    /// ```
     pub fn subtract(&self, other: &Series) -> Result<Series, CrossbowError> {
         binary_op(self, other, "-",
             |a, b| a.checked_sub(b),
@@ -35,6 +57,17 @@ impl Series {
     }
 
     /// Element-wise multiplication: `self[i] * other[i]`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let a = Series::from("a", vec![2i32, 3]);
+    /// let b = Series::from("b", vec![4i32, 5]);
+    /// let c = a.multiply(&b).unwrap();
+    /// assert_eq!(c.len(), 2);
+    /// ```
     pub fn multiply(&self, other: &Series) -> Result<Series, CrossbowError> {
         binary_op(self, other, "*",
             |a, b| a.checked_mul(b),
@@ -46,6 +79,17 @@ impl Series {
     /// Element-wise division: `self[i] / other[i]`.
     ///
     /// Returns [`CrossbowError::DivisionByZero`] if any element of `other` is zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let a = Series::from("a", vec![10i32, 20]);
+    /// let b = Series::from("b", vec![2i32, 4]);
+    /// let c = a.divide(&b).unwrap();
+    /// assert_eq!(c.len(), 2);
+    /// ```
     pub fn divide(&self, other: &Series) -> Result<Series, CrossbowError> {
         binary_op(self, other, "/",
             |a, b| Some(a.checked_div(b).unwrap_or(a / b)),
@@ -55,11 +99,25 @@ impl Series {
     }
 
     /// Element-wise modulo: `self[i] % other[i]`. Only supports `Int32`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let a = Series::from("a", vec![10i32, 15]);
+    /// let b = Series::from("b", vec![3i32, 4]);
+    /// let c = a.modulo(&b).unwrap();
+    /// assert_eq!(c.len(), 2);
+    /// ```
     pub fn modulo(&self, other: &Series) -> Result<Series, CrossbowError> {
         binary_op_i32(self, other, "%", |a, b| Some(a % b), true)
     }
 }
 
+// Performs an element-wise binary arithmetic operation (add/sub/mul/div) between two
+// Series across Int32 and Float64 types. Null values propagate; overflow and division
+// by zero return errors.
 fn binary_op<FI, FF>(
     s1: &Series,
     s2: &Series,
@@ -143,6 +201,7 @@ where
     }
 }
 
+// Int32-only variant of binary_op. Used by modulo (which doesn't support Float64).
 fn binary_op_i32<F>(
     s1: &Series,
     s2: &Series,

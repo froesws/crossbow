@@ -6,10 +6,20 @@ use crate::{CrossbowError, DataFrame, Series};
 use crate::{build_column, build_string_column, expected_array};
 
 impl DataFrame {
-    /// Sorts the `DataFrame` by a column.
+    /// Sorts the `DataFrame` by a column. Set `ascending: true` for
+    /// smallest-first, `false` for largest-first. Null values sort first.
     ///
-    /// Set `ascending: true` for smallest-first, `false` for largest-first.
-    /// Null values sort first.
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("val", vec![3i32, 1, 2]);
+    /// let df = DataFrame::new(vec![a]).unwrap();
+    /// let sorted = df.sort_by("val", true).unwrap();
+    /// let row = sorted.get_row(0).unwrap();
+    /// assert_eq!(row[0], "1");
+    /// ```
     pub fn sort_by(&self, column_name: &str, ascending: bool) -> Result<DataFrame, CrossbowError> {
         let sort_col = self.select(column_name)?;
 

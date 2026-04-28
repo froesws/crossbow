@@ -21,6 +21,17 @@ mod unit_test;
 ///
 /// Use [`DataFrame::new`] to construct one from `Vec<Series>`.
 /// Supports column management, row access, filtering, sorting, and grouping.
+///
+/// # Examples
+///
+/// ```
+/// use crossbow::{DataFrame, Series};
+///
+/// let a = Series::from("a", vec![1i32, 2, 3]);
+/// let b = Series::from("b", vec!["x", "y", "z"]);
+/// let df = DataFrame::new(vec![a, b]).unwrap();
+/// assert_eq!(df.shape(), (3, 2));
+/// ```
 #[derive(Debug, Clone)]
 pub struct DataFrame {
     columns: Vec<Series>,
@@ -30,6 +41,17 @@ impl DataFrame {
     /// Creates a new `DataFrame` from a vector of `Series`.
     ///
     /// All `Series` must have the same length. Column names must be unique.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("a", vec![1i32, 2, 3]);
+    /// let b = Series::from("b", vec![4.0, 5.0, 6.0]);
+    /// let df = DataFrame::new(vec![a, b]).unwrap();
+    /// assert_eq!(df.shape(), (3, 2));
+    /// ```
     pub fn new(columns: Vec<Series>) -> Result<Self, CrossbowError> {
         if columns.is_empty() {
             return Ok(DataFrame { columns });
@@ -50,6 +72,16 @@ impl DataFrame {
     }
 
     /// Returns the shape as `(rows, columns)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("a", vec![1i32, 2, 3]);
+    /// let df = DataFrame::new(vec![a]).unwrap();
+    /// assert_eq!(df.shape(), (3, 1));
+    /// ```
     pub fn shape(&self) -> (usize, usize) {
         if self.columns.is_empty() {
             (0, 0)
@@ -59,11 +91,33 @@ impl DataFrame {
     }
 
     /// Returns a vector of all column names in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("x", vec![1i32]);
+    /// let b = Series::from("y", vec![2i32]);
+    /// let df = DataFrame::new(vec![a, b]).unwrap();
+    /// assert_eq!(df.get_column_names(), vec!["x", "y"]);
+    /// ```
     pub fn get_column_names(&self) -> Vec<&str> {
         self.columns.iter().map(|s| s.name()).collect()
     }
 
     /// Selects a column by name. Returns [`CrossbowError::ColumnNotFound`] if missing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("a", vec![1i32, 2, 3]);
+    /// let df = DataFrame::new(vec![a]).unwrap();
+    /// let col = df.select("a").unwrap();
+    /// assert_eq!(col.len(), 3);
+    /// ```
     pub fn select(&self, name: &str) -> Result<&Series, CrossbowError> {
         self.columns
             .iter()
@@ -72,11 +126,33 @@ impl DataFrame {
     }
 
     /// Returns a reference to all columns in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("a", vec![1i32]);
+    /// let df = DataFrame::new(vec![a]).unwrap();
+    /// assert_eq!(df.columns().len(), 1);
+    /// ```
     pub fn columns(&self) -> &[Series] {
         &self.columns
     }
 
     /// Returns a single row as `Vec<String>`. Index out of range returns an error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("a", vec![10i32]);
+    /// let b = Series::from("b", vec!["hello"]);
+    /// let df = DataFrame::new(vec![a, b]).unwrap();
+    /// let row = df.get_row(0).unwrap();
+    /// assert_eq!(row, vec!["10", "\"hello\""]);
+    /// ```
     pub fn get_row(&self, index: usize) -> Result<Vec<String>, CrossbowError> {
         if index >= self.shape().0 {
             return Err(CrossbowError::IndexOutOfBounds(index));
@@ -90,6 +166,17 @@ impl DataFrame {
     }
 
     /// Returns multiple rows by index. Fails if any index is out of range.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("a", vec![1i32, 2, 3]);
+    /// let df = DataFrame::new(vec![a]).unwrap();
+    /// let rows = df.get_rows(&[0, 2]).unwrap();
+    /// assert_eq!(rows.len(), 2);
+    /// ```
     pub fn get_rows(&self, indices: &[usize]) -> Result<Vec<Vec<String>>, CrossbowError> {
         let (n_rows, _) = self.shape();
         for &idx in indices {
@@ -110,6 +197,18 @@ impl DataFrame {
     }
 
     /// Adds a new column. Must have the same row count and a unique name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("a", vec![1i32, 2]);
+    /// let df = DataFrame::new(vec![a]).unwrap();
+    /// let b = Series::from("b", vec![3.0, 4.0]);
+    /// let df2 = df.add_column(b).unwrap();
+    /// assert_eq!(df2.shape(), (2, 2));
+    /// ```
     pub fn add_column(&self, series: Series) -> Result<DataFrame, CrossbowError> {
         if series.len() != self.shape().0 {
             return Err(CrossbowError::MismatchedColumnLengths);
@@ -125,6 +224,18 @@ impl DataFrame {
     }
 
     /// Removes a column by name. Returns error if the column does not exist.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("a", vec![1i32]);
+    /// let b = Series::from("b", vec![2i32]);
+    /// let df = DataFrame::new(vec![a, b]).unwrap();
+    /// let df2 = df.remove_column("a").unwrap();
+    /// assert_eq!(df2.shape(), (1, 1));
+    /// ```
     pub fn remove_column(&self, name: &str) -> Result<DataFrame, CrossbowError> {
         let new_columns: Vec<Series> = self.columns
             .iter()
@@ -140,6 +251,17 @@ impl DataFrame {
     }
 
     /// Renames a column. Fails if `old_name` is missing or `new_name` is taken.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("old", vec![1i32]);
+    /// let df = DataFrame::new(vec![a]).unwrap();
+    /// let df2 = df.rename_column("old", "new").unwrap();
+    /// assert_eq!(df2.get_column_names(), vec!["new"]);
+    /// ```
     pub fn rename_column(&self, old_name: &str, new_name: &str) -> Result<DataFrame, CrossbowError> {
         if !self.get_column_names().contains(&old_name) {
             return Err(CrossbowError::ColumnNotFound(old_name.to_string()));

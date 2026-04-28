@@ -18,6 +18,9 @@ use arrow::array::{Array, ArrayRef};
 use arrow::datatypes::DataType;
 use std::sync::Arc;
 
+// Generates a comparison method (gt, lt, eq, etc.) on Series. Downcasts the internal
+// array to a PrimitiveArray, calls the specified Arrow comparison kernel, and wraps the
+// resulting boolean array in a new Series. The $doc parameter sets the method doc comment.
 macro_rules! impl_comparison_op {
     ($func_name:ident, $kernel:path, $doc:expr) => {
         #[doc = $doc]
@@ -60,6 +63,16 @@ mod unit_test;
 /// [`ArrayRef`] from the `arrow-rs` crate, providing type-safe access
 /// and a rich set of transformation, comparison, arithmetic, null-handling,
 /// and aggregation operations.
+///
+/// # Examples
+///
+/// ```
+/// use crossbow::Series;
+///
+/// let s = Series::from("age", vec![25i32, 30, 35]);
+/// assert_eq!(s.len(), 3);
+/// assert_eq!(s.name(), "age");
+/// ```
 #[derive(Debug, Clone)]
 pub struct Series {
     name: String,
@@ -70,6 +83,15 @@ impl Series {
     /// Creates a new `Series` from an Arrow array reference.
     ///
     /// Prefer [`Series::from`] for constructing from Rust `Vec<T>` values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![1i32, 2, 3]);
+    /// assert_eq!(s.len(), 3);
+    /// ```
     pub fn new(name: impl Into<String>, data: ArrayRef) -> Self {
         Series {
             name: name.into(),
@@ -81,6 +103,15 @@ impl Series {
     ///
     /// Convenience constructor using the [`IntoSeries`] trait. Supports all
     /// integer, float, bool, `&str`, and `String` vectors (including `Option` variants).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("score", vec![10.0, 20.5, 15.0]);
+    /// assert_eq!(s.len(), 3);
+    /// ```
     pub fn from<T>(name: &str, data: Vec<T>) -> Series
     where
         T: 'static,
@@ -90,27 +121,76 @@ impl Series {
     }
 
     /// Returns the column name of this `Series`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("temperature", vec![22.5, 23.0]);
+    /// assert_eq!(s.name(), "temperature");
+    /// ```
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// Returns a reference to the underlying Arrow array.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    /// use arrow::datatypes::DataType;
+    ///
+    /// let s = Series::from("x", vec![1i32, 2]);
+    /// assert_eq!(*s.dtype(), DataType::Int32);
+    /// ```
     #[allow(dead_code)]
     pub fn data(&self) -> &ArrayRef {
         &self.data
     }
 
     /// Returns the Arrow data type of this column.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    /// use arrow::datatypes::DataType;
+    ///
+    /// let s = Series::from("val", vec![1.0, 2.0]);
+    /// assert_eq!(*s.dtype(), DataType::Float64);
+    /// ```
     pub fn dtype(&self) -> &DataType {
         self.data.data_type()
     }
 
     /// Returns the number of elements (including nulls).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![1i32, 2, 3, 4, 5]);
+    /// assert_eq!(s.len(), 5);
+    /// ```
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
     /// Returns `true` if the `Series` contains zero elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    /// use std::sync::Arc;
+    /// use arrow::array::Int32Array;
+    ///
+    /// let s = Series::new("empty", Arc::new(Int32Array::from(Vec::<i32>::new())));
+    /// assert!(s.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -118,6 +198,16 @@ impl Series {
     /// Attempts to downcast the internal array to a concrete Arrow array type.
     ///
     /// Returns `Some(&T)` on success, `None` if the type does not match.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![1i32, 2, 3]);
+    /// let arr = s.as_primitive::<arrow::array::Int32Array>().unwrap();
+    /// assert_eq!(arr.value(0), 1);
+    /// ```
     pub fn as_primitive<T>(&self) -> Option<&T>
     where
         T: 'static,
@@ -177,8 +267,27 @@ impl Series {
 /// Implemented for all common Rust types (`i8`-`i64`, `u8`-`u64`, `f32`, `f64`,
 /// `bool`, `&str`, `String`) and their `Option` variants. Uses the
 /// [`impl_into_series_for_numerics!`] macro for numeric types.
+///
+/// # Examples
+///
+/// ```
+/// use crossbow::IntoSeries;
+///
+/// let s = vec![1i32, 2, 3].into_series("nums");
+/// assert_eq!(s.name(), "nums");
+/// assert_eq!(s.len(), 3);
+/// ```
 pub trait IntoSeries {
     /// Consumes the vector, returning a `Series` with the given name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::IntoSeries;
+    ///
+    /// let s = vec![1.0, 2.0, 3.0].into_series("values");
+    /// assert_eq!(s.len(), 3);
+    /// ```
     fn into_series(self, name: &str) -> Series;
 }
 
@@ -204,6 +313,9 @@ impl IntoSeries for Vec<String> {
     }
 }
 
+// Generates IntoSeries trait implementations for numeric and boolean Arrow types.
+// For a given Rust type $T and Arrow array type $A, creates impls for both
+// Vec<$T> and Vec<Option<$T>>.
 macro_rules! impl_into_series_for_numerics {
     ($T:ty, $A:ty) => {
         impl IntoSeries for Vec<$T> {
@@ -233,6 +345,8 @@ impl_into_series_for_numerics!(u64, arrow::array::UInt64Array);
 impl_into_series_for_numerics!(f32, arrow::array::Float32Array);
 impl_into_series_for_numerics!(f64, arrow::array::Float64Array);
 
+// Duplicate of the comparison-op macro (see line ~21). Shadowed by the active definition
+// above and currently unreachable. Retained with #[allow(unused_macros)].
 #[allow(unused_macros)]
 macro_rules! impl_comparison_op {
     ($func_name:ident, $kernel:path, $doc:expr) => {

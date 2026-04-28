@@ -8,6 +8,18 @@ use crate::{build_column, build_string_column};
 
 impl DataFrame {
     /// Filters rows using a boolean mask `Series`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let a = Series::from("a", vec![1i32, 2, 3, 4]);
+    /// let mask = Series::from("mask", vec![true, false, true, false]);
+    /// let df = DataFrame::new(vec![a]).unwrap();
+    /// let filtered = df.filter_by_mask(&mask).unwrap();
+    /// assert_eq!(filtered.shape(), (2, 1));
+    /// ```
     pub fn filter_by_mask(&self, mask: &Series) -> Result<DataFrame, CrossbowError> {
         if mask.len() != self.shape().0 {
             return Err(CrossbowError::MismatchedColumnLengths);

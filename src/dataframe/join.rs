@@ -1,3 +1,27 @@
+//! Join operations for `DataFrame`.
+//!
+//! Supports inner, left, and outer joins on a single key column per side.
+//! Colliding column names are automatically renamed with a `_right` suffix.
+//!
+//! # Examples
+//!
+//! ```
+//! use crossbow::DataFrame;
+//! use crossbow::Series;
+//!
+//! let left = DataFrame::new(vec![
+//!     Series::from("id", vec![1i32, 2, 3]),
+//!     Series::from("name", vec!["a", "b", "c"]),
+//! ]).unwrap();
+//!
+//! let right = DataFrame::new(vec![
+//!     Series::from("id", vec![1i32, 2, 4]),
+//!     Series::from("score", vec![10i32, 20, 40]),
+//! ]).unwrap();
+//!
+//! let joined = left.join_inner(&right, "id", "id").unwrap();
+//! assert_eq!(joined.shape(), (2, 3)); // id, name, score
+//! ```
 use std::collections::HashMap;
 use std::sync::Arc;
 use arrow::array::Array;
@@ -5,6 +29,7 @@ use arrow::datatypes::DataType;
 use crate::{CrossbowError, DataFrame, Series};
 use crate::{build_column_opt, build_string_column_opt};
 
+// Enum representing the three supported join strategies.
 #[derive(Clone, Copy, PartialEq)]
 enum JoinType {
     Inner,
@@ -12,6 +37,7 @@ enum JoinType {
     Left,
 }
 
+// Builds a HashMap from join key values to the list of row indices where they appear.
 fn build_join_map(df: &DataFrame, key_col: &str) -> Result<HashMap<String, Vec<usize>>, CrossbowError> {
     let col = df.select(key_col)?;
     let mut map: HashMap<String, Vec<usize>> = HashMap::new();
@@ -22,6 +48,8 @@ fn build_join_map(df: &DataFrame, key_col: &str) -> Result<HashMap<String, Vec<u
     Ok(map)
 }
 
+// Returns a deduplicated column name for a right-side join column. Appends `_right`
+// if the name already exists in the left DataFrame's column names.
 fn right_column_name(left_names: &[String], right_name: &str) -> String {
     if left_names.contains(&right_name.to_string()) {
         format!("{}_right", right_name)
@@ -30,6 +58,8 @@ fn right_column_name(left_names: &[String], right_name: &str) -> String {
     }
 }
 
+// Builds an Arrow array from optional indices dispatched by DataType. Uses the
+// build_column_opt! / build_string_column_opt! macros for type-specific builder creation.
 fn build_array_for_dtype(
     arr: &dyn Array,
     dtype: &DataType,
@@ -47,6 +77,8 @@ fn build_array_for_dtype(
     }
 }
 
+// Builds the left-side array for a join result. Indices beyond `left_rows` are treated
+// as sentinel values and produce null entries (for unmatched outer join rows).
 fn build_left_array_for_dtype(
     arr: &dyn Array,
     dtype: &DataType,
@@ -60,6 +92,8 @@ fn build_left_array_for_dtype(
     build_array_for_dtype(arr, dtype, &opt_indices, capacity)
 }
 
+// Core join engine: pairs matching rows from two DataFrames according to the join type,
+// builds aligned index lists, and constructs new columns from the resulting row indices.
 fn join_impl(
     left: &DataFrame,
     right: &DataFrame,
@@ -123,16 +157,67 @@ fn join_impl(
 
 impl DataFrame {
     /// Inner join: returns only rows where the join key matches in both DataFrames.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let left = DataFrame::new(vec![
+    ///     Series::from("id", vec![1i32, 2, 3]),
+    ///     Series::from("name", vec!["a", "b", "c"]),
+    /// ]).unwrap();
+    /// let right = DataFrame::new(vec![
+    ///     Series::from("id", vec![1i32, 2]),
+    ///     Series::from("val", vec![10i32, 20]),
+    /// ]).unwrap();
+    /// let joined = left.join_inner(&right, "id", "id").unwrap();
+    /// assert_eq!(joined.shape(), (2, 3));
+    /// ```
     pub fn join_inner(&self, other: &DataFrame, left_on: &str, right_on: &str) -> Result<DataFrame, CrossbowError> {
         join_impl(self, other, left_on, right_on, JoinType::Inner)
     }
 
     /// Outer join: returns all rows from both DataFrames.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let left = DataFrame::new(vec![
+    ///     Series::from("id", vec![1i32, 2]),
+    ///     Series::from("name", vec!["a", "b"]),
+    /// ]).unwrap();
+    /// let right = DataFrame::new(vec![
+    ///     Series::from("id", vec![2i32, 3]),
+    ///     Series::from("val", vec![20i32, 30]),
+    /// ]).unwrap();
+    /// let joined = left.join_outer(&right, "id", "id").unwrap();
+    /// assert_eq!(joined.shape(), (3, 3));
+    /// ```
     pub fn join_outer(&self, other: &DataFrame, left_on: &str, right_on: &str) -> Result<DataFrame, CrossbowError> {
         join_impl(self, other, left_on, right_on, JoinType::Outer)
     }
 
     /// Left join: returns all rows from the left DataFrame.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::{DataFrame, Series};
+    ///
+    /// let left = DataFrame::new(vec![
+    ///     Series::from("id", vec![1i32, 2, 3]),
+    ///     Series::from("name", vec!["a", "b", "c"]),
+    /// ]).unwrap();
+    /// let right = DataFrame::new(vec![
+    ///     Series::from("id", vec![1i32, 3]),
+    ///     Series::from("val", vec![10i32, 30]),
+    /// ]).unwrap();
+    /// let joined = left.join_left(&right, "id", "id").unwrap();
+    /// assert_eq!(joined.shape(), (3, 3));
+    /// ```
     pub fn join_left(&self, other: &DataFrame, left_on: &str, right_on: &str) -> Result<DataFrame, CrossbowError> {
         join_impl(self, other, left_on, right_on, JoinType::Left)
     }

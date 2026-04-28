@@ -9,11 +9,31 @@ use crate::{build_column, build_string_column, expected_array};
 
 impl Series {
     /// Returns a boolean `Series` indicating which elements are null.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![1i32, 2, 3]);
+    /// let nulls = s.is_null().unwrap();
+    /// assert_eq!(nulls.len(), 3);
+    /// ```
     pub fn is_null(&self) -> Result<Series, CrossbowError> {
         self.null_mask(false)
     }
 
     /// Returns a boolean `Series` indicating which elements are **not** null.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![Some(1i32), None, Some(3)]);
+    /// let not_null = s.is_not_null().unwrap();
+    /// assert_eq!(not_null.len(), 3);
+    /// ```
     pub fn is_not_null(&self) -> Result<Series, CrossbowError> {
         self.null_mask(true)
     }
@@ -21,6 +41,17 @@ impl Series {
     /// Fills null values with the corresponding value from another `Series`.
     ///
     /// Both `Series` must have the same length and data type. Supports `Int32` and `Float64`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let a = Series::from("a", vec![Some(1i32), None, Some(3)]);
+    /// let b = Series::from("b", vec![10i32, 20, 30]);
+    /// let filled = a.fill_null(&b).unwrap();
+    /// assert_eq!(filled.len(), 3);
+    /// ```
     pub fn fill_null(&self, fill_value: &Series) -> Result<Series, CrossbowError> {
         if self.len() != fill_value.len() {
             return Err(CrossbowError::MismatchedColumnLengths);
@@ -80,6 +111,16 @@ impl Series {
     /// Removes all null values, returning a shorter `Series`.
     ///
     /// Supports `Int32`, `Float64`, and `Utf8`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![Some(1i32), None, Some(3)]);
+    /// let cleaned = s.drop_null().unwrap();
+    /// assert_eq!(cleaned.len(), 2);
+    /// ```
     pub fn drop_null(&self) -> Result<Series, CrossbowError> {
         let valid: Vec<usize> = (0..self.len()).filter(|&i| self.data.is_valid(i)).collect();
         let n = valid.len();
@@ -99,6 +140,15 @@ impl Series {
     ///
     /// UTF-8 values are returned with surrounding quotes.
     /// Returns [`CrossbowError::IndexOutOfBounds`] if `index` is out of range.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![10i32]);
+    /// assert_eq!(s.value_at(0).unwrap(), "10");
+    /// ```
     pub fn value_at(&self, index: usize) -> Result<String, CrossbowError> {
         if index >= self.len() {
             return Err(CrossbowError::IndexOutOfBounds(index));
@@ -109,6 +159,16 @@ impl Series {
     /// Returns a zero-copy slice of the `Series` from `offset` with the given `length`.
     ///
     /// Returns [`CrossbowError::IndexOutOfBounds`] if the slice exceeds the `Series` length.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![1i32, 2, 3, 4, 5]);
+    /// let slice = s.slice(1, 3).unwrap();
+    /// assert_eq!(slice.len(), 3);
+    /// ```
     pub fn slice(&self, offset: usize, length: usize) -> Result<Series, CrossbowError> {
         if offset + length > self.len() {
             return Err(CrossbowError::IndexOutOfBounds(offset + length));
@@ -118,6 +178,15 @@ impl Series {
     }
 
     /// Returns `true` if the `Series` holds numeric data (integer or float).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![1i32]);
+    /// assert!(s.is_numeric());
+    /// ```
     pub fn is_numeric(&self) -> bool {
         matches!(self.dtype(), 
             DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64 |
@@ -127,15 +196,34 @@ impl Series {
     }
 
     /// Returns `true` if the `Series` holds string data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec!["hello"]);
+    /// assert!(s.is_string());
+    /// ```
     pub fn is_string(&self) -> bool {
         matches!(self.dtype(), DataType::Utf8 | DataType::LargeUtf8)
     }
 
     /// Returns `true` if the `Series` holds boolean data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crossbow::Series;
+    ///
+    /// let s = Series::from("x", vec![true, false]);
+    /// assert!(s.is_boolean());
+    /// ```
     pub fn is_boolean(&self) -> bool {
         matches!(self.dtype(), DataType::Boolean)
     }
 
+    // Builds a boolean Series marking null (or non-null when `invert` is true) positions.
     fn null_mask(&self, invert: bool) -> Result<Series, CrossbowError> {
         let mut builder = arrow::array::BooleanBuilder::with_capacity(self.len());
         let suffix = if invert { "_is_not_null" } else { "_is_null" };
