@@ -3,6 +3,7 @@ use std::sync::Arc;
 use arrow::array::Array;
 use arrow::datatypes::DataType;
 use crate::{CrossbowError, DataFrame, Series};
+use crate::{build_column_opt, build_string_column_opt};
 
 #[derive(Clone, Copy, PartialEq)]
 enum JoinType {
@@ -29,45 +30,6 @@ fn right_column_name(left_names: &[String], right_name: &str) -> String {
     }
 }
 
-macro_rules! build_column_from_indices {
-    ($arr:expr, $indices:expr, $builder_ty:ty, $arr_downcast:ty, $cap:expr) => {{
-        let a = $arr.as_any().downcast_ref::<$arr_downcast>().unwrap();
-        let mut b = <$builder_ty>::with_capacity($cap);
-        for &oi in $indices {
-            match oi {
-                Some(idx) => {
-                    if a.is_valid(idx) {
-                        b.append_value(a.value(idx));
-                    } else {
-                        b.append_null();
-                    }
-                }
-                None => b.append_null(),
-            }
-        }
-        Arc::new(b.finish()) as Arc<dyn Array>
-    }};
-}
-
-macro_rules! build_column_all_left {
-    ($arr:expr, $indices:expr, $builder_ty:ty, $arr_downcast:ty, $cap:expr, $lrow:expr) => {{
-        let a = $arr.as_any().downcast_ref::<$arr_downcast>().unwrap();
-        let mut b = <$builder_ty>::with_capacity($cap);
-        for &li in $indices {
-            if li < $lrow {
-                if a.is_valid(li) {
-                    b.append_value(a.value(li));
-                } else {
-                    b.append_null();
-                }
-            } else {
-                b.append_null();
-            }
-        }
-        Arc::new(b.finish()) as Arc<dyn Array>
-    }};
-}
-
 fn build_array_for_dtype(
     arr: &dyn Array,
     dtype: &DataType,
@@ -75,24 +37,12 @@ fn build_array_for_dtype(
     capacity: usize,
 ) -> Arc<dyn Array> {
     match dtype {
-        DataType::Int32 => build_column_from_indices!(arr, indices, arrow::array::Int32Builder, arrow::array::Int32Array, capacity),
-        DataType::Int64 => build_column_from_indices!(arr, indices, arrow::array::Int64Builder, arrow::array::Int64Array, capacity),
-        DataType::Float32 => build_column_from_indices!(arr, indices, arrow::array::Float32Builder, arrow::array::Float32Array, capacity),
-        DataType::Float64 => build_column_from_indices!(arr, indices, arrow::array::Float64Builder, arrow::array::Float64Array, capacity),
-        DataType::Boolean => build_column_from_indices!(arr, indices, arrow::array::BooleanBuilder, arrow::array::BooleanArray, capacity),
-        DataType::Utf8 => {
-            let a = arr.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
-            let mut b = arrow::array::StringBuilder::with_capacity(capacity, capacity * 16);
-            for &oi in indices {
-                match oi {
-                    Some(idx) => {
-                        if a.is_valid(idx) { b.append_value(a.value(idx)); } else { b.append_null(); }
-                    }
-                    None => b.append_null(),
-                }
-            }
-            Arc::new(b.finish()) as Arc<dyn Array>
-        }
+        DataType::Int32 => build_column_opt!(arr, indices, arrow::array::Int32Builder, arrow::array::Int32Array, capacity),
+        DataType::Int64 => build_column_opt!(arr, indices, arrow::array::Int64Builder, arrow::array::Int64Array, capacity),
+        DataType::Float32 => build_column_opt!(arr, indices, arrow::array::Float32Builder, arrow::array::Float32Array, capacity),
+        DataType::Float64 => build_column_opt!(arr, indices, arrow::array::Float64Builder, arrow::array::Float64Array, capacity),
+        DataType::Boolean => build_column_opt!(arr, indices, arrow::array::BooleanBuilder, arrow::array::BooleanArray, capacity),
+        DataType::Utf8 => build_string_column_opt!(arr, indices, capacity),
         _ => panic!("Unsupported type in join: {:?}", dtype),
     }
 }
@@ -104,26 +54,10 @@ fn build_left_array_for_dtype(
     capacity: usize,
     left_rows: usize,
 ) -> Arc<dyn Array> {
-    match dtype {
-        DataType::Int32 => build_column_all_left!(arr, indices, arrow::array::Int32Builder, arrow::array::Int32Array, capacity, left_rows),
-        DataType::Int64 => build_column_all_left!(arr, indices, arrow::array::Int64Builder, arrow::array::Int64Array, capacity, left_rows),
-        DataType::Float32 => build_column_all_left!(arr, indices, arrow::array::Float32Builder, arrow::array::Float32Array, capacity, left_rows),
-        DataType::Float64 => build_column_all_left!(arr, indices, arrow::array::Float64Builder, arrow::array::Float64Array, capacity, left_rows),
-        DataType::Boolean => build_column_all_left!(arr, indices, arrow::array::BooleanBuilder, arrow::array::BooleanArray, capacity, left_rows),
-        DataType::Utf8 => {
-            let a = arr.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
-            let mut b = arrow::array::StringBuilder::with_capacity(capacity, capacity * 16);
-            for &li in indices {
-                if li < left_rows {
-                    if a.is_valid(li) { b.append_value(a.value(li)); } else { b.append_null(); }
-                } else {
-                    b.append_null();
-                }
-            }
-            Arc::new(b.finish()) as Arc<dyn Array>
-        }
-        _ => panic!("Unsupported type in join: {:?}", dtype),
-    }
+    let opt_indices: Vec<Option<usize>> = indices.iter().map(|&li| {
+        if li < left_rows { Some(li) } else { None }
+    }).collect();
+    build_array_for_dtype(arr, dtype, &opt_indices, capacity)
 }
 
 fn join_impl(
@@ -172,17 +106,15 @@ fn join_impl(
 
     for col in left.columns() {
         let arr = col.data();
-        let arr_ref: &dyn Array = arr.as_ref();
-        let built = build_left_array_for_dtype(arr_ref, col.dtype(), &out_left_indices, total_rows, left_rows);
+        let built = build_left_array_for_dtype(arr.as_ref(), col.dtype(), &out_left_indices, total_rows, left_rows);
         new_columns.push(Series::new(col.name(), built));
     }
 
     for col in right.columns() {
         if col.name() == right_on { continue; }
         let arr = col.data();
-        let arr_ref: &dyn Array = arr.as_ref();
         let out_name = right_column_name(&left_names, col.name());
-        let built = build_array_for_dtype(arr_ref, col.dtype(), &out_right_indices, total_rows);
+        let built = build_array_for_dtype(arr.as_ref(), col.dtype(), &out_right_indices, total_rows);
         new_columns.push(Series::new(&out_name, built));
     }
 
@@ -191,22 +123,16 @@ fn join_impl(
 
 impl DataFrame {
     /// Inner join: returns only rows where the join key matches in both DataFrames.
-    ///
-    /// Columns from the left `DataFrame` keep their names. Columns from the right
-    /// are included except the join key. If a right column name collides with a
-    /// left column, `_right` is appended.
     pub fn join_inner(&self, other: &DataFrame, left_on: &str, right_on: &str) -> Result<DataFrame, CrossbowError> {
         join_impl(self, other, left_on, right_on, JoinType::Inner)
     }
 
-    /// Outer join: returns all rows from both DataFrames. Rows without a match
-    /// have nulls in columns from the other side.
+    /// Outer join: returns all rows from both DataFrames.
     pub fn join_outer(&self, other: &DataFrame, left_on: &str, right_on: &str) -> Result<DataFrame, CrossbowError> {
         join_impl(self, other, left_on, right_on, JoinType::Outer)
     }
 
-    /// Left join: returns all rows from the left `DataFrame`. Rows without a
-    /// match in the right have nulls in right-side columns.
+    /// Left join: returns all rows from the left DataFrame.
     pub fn join_left(&self, other: &DataFrame, left_on: &str, right_on: &str) -> Result<DataFrame, CrossbowError> {
         join_impl(self, other, left_on, right_on, JoinType::Left)
     }

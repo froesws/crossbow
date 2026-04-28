@@ -4,6 +4,7 @@
 //! Project: [crossbow]
 //! Developed at: [Uergs -- Universidade Estadual do Rio Grande do Sul]
 
+pub mod utils;
 pub mod error;
 pub mod series;
 pub mod dataframe;
