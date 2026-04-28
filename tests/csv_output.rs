@@ -4,6 +4,7 @@ use std::path::Path;
 use arrow::csv::ReaderBuilder;
 use arrow::datatypes::*;
 use arrow::array::*;
+use arrow::compute::concat_batches;
 use crossbow::{DataFrame, Series};
 
 static OUTPUT_DIR: &str = "tests/output";
@@ -22,13 +23,14 @@ fn load_test_data() -> DataFrame {
     ]));
 
     let file = File::open("data_1M.csv").unwrap();
-    let mut reader = ReaderBuilder::new(schema.clone())
+    let reader = ReaderBuilder::new(schema.clone())
         .with_header(true)
-        .with_batch_size(2000)
+        .with_batch_size(65536)
         .build(file)
         .unwrap();
 
-    let batch = reader.next().unwrap().unwrap();
+    let batches: Vec<RecordBatch> = reader.collect::<Result<_, _>>().unwrap();
+    let batch = concat_batches(&schema, batches.iter()).unwrap();
 
     let columns: Vec<Series> = schema.fields().iter().enumerate().map(|(i, field)| {
         Series::new(field.name(), batch.column(i).clone())
@@ -103,7 +105,7 @@ fn test_save_senior_employees() {
 
     assert!(Path::new(&out).exists());
     let rows = count_csv_rows(&out);
-    assert!(rows > 0 && rows < 2000);
+    assert!(rows > 0 && rows < 1_000_000);
 
     let ages: Vec<i32> = read_csv_column(&out, 2).into_iter().map(|s| s.parse().unwrap()).collect();
     for age in &ages {
@@ -198,7 +200,7 @@ fn test_save_sorted_by_salary_desc() {
     write_df_to_csv(&sorted, &out);
 
     assert!(Path::new(&out).exists());
-    assert_eq!(count_csv_rows(&out), 2000);
+    assert_eq!(count_csv_rows(&out), 1_000_000);
 
     let salaries: Vec<f64> = read_csv_column(&out, 1).into_iter().map(|s| s.parse().unwrap()).collect();
     for i in 1..salaries.len() {
@@ -215,7 +217,7 @@ fn test_save_sorted_by_age_asc() {
     write_df_to_csv(&sorted, &out);
 
     assert!(Path::new(&out).exists());
-    assert_eq!(count_csv_rows(&out), 2000);
+    assert_eq!(count_csv_rows(&out), 1_000_000);
 
     let ages: Vec<i32> = read_csv_column(&out, 2).into_iter().map(|s| s.parse().unwrap()).collect();
     for i in 1..ages.len() {
@@ -297,7 +299,7 @@ fn test_save_complex_combined_filter() {
 fn test_save_empty_filter_result() {
     ensure_output_dir();
     let df = load_test_data();
-    let all_false = Series::new("none", Arc::new(BooleanArray::from(vec![false; 2000])));
+    let all_false = Series::new("none", Arc::new(BooleanArray::from(vec![false; df.shape().0])));
     let empty = df.filter_by_mask(&all_false).unwrap();
     let out = format!("{}/empty_filter_result.csv", OUTPUT_DIR);
     write_df_to_csv(&empty, &out);
